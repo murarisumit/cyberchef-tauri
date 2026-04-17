@@ -12,6 +12,7 @@ export const projectRoot = path.resolve(__dirname, "..");
 export const stagedDistDir = path.join(projectRoot, ".artifacts", "cyberchef-dist");
 export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
+export const wrapperAssetsDir = path.join(projectRoot, "wrapper-assets");
 const currentNodeBinDir = path.dirname(process.execPath);
 
 function shellEscape(value) {
@@ -25,6 +26,48 @@ async function pathExists(targetPath) {
     } catch {
         return false;
     }
+}
+
+async function applyWrapperOverrides() {
+    const stagedIndexPath = path.join(stagedDistDir, "index.html");
+    const stagedFontOverridePath = path.join(stagedDistDir, "tauri-font-override.css");
+    const stagedDesktopBridgePath = path.join(stagedDistDir, "tauri-desktop.js");
+    const sourceFontOverridePath = path.join(wrapperAssetsDir, "tauri-font-override.css");
+    const sourceDesktopBridgePath = path.join(wrapperAssetsDir, "tauri-desktop.js");
+    const fontOverrideTag = '<link href="tauri-font-override.css" rel="stylesheet">';
+    const desktopBridgeTag = '<script defer="defer" src="tauri-desktop.js"></script>';
+
+    if (!(await pathExists(stagedIndexPath))) {
+        throw new Error(`Staged CyberChef index not found at ${stagedIndexPath}`);
+    }
+
+    if (!(await pathExists(sourceFontOverridePath))) {
+        throw new Error(`Wrapper font override not found at ${sourceFontOverridePath}`);
+    }
+
+    if (!(await pathExists(sourceDesktopBridgePath))) {
+        throw new Error(`Wrapper desktop bridge not found at ${sourceDesktopBridgePath}`);
+    }
+
+    const indexHtml = await fs.readFile(stagedIndexPath, "utf8");
+    let updatedIndexHtml = indexHtml;
+
+    if (!updatedIndexHtml.includes(fontOverrideTag)) {
+        updatedIndexHtml = updatedIndexHtml.replace("</head>", `${fontOverrideTag}</head>`);
+    }
+
+    if (!updatedIndexHtml.includes(desktopBridgeTag)) {
+        updatedIndexHtml = updatedIndexHtml.replace("</head>", `${desktopBridgeTag}</head>`);
+    }
+
+    if (updatedIndexHtml === indexHtml &&
+        (!indexHtml.includes(fontOverrideTag) || !indexHtml.includes(desktopBridgeTag))) {
+        throw new Error(`Unable to inject wrapper font override into ${stagedIndexPath}`);
+    }
+
+    await fs.copyFile(sourceFontOverridePath, stagedFontOverridePath);
+    await fs.copyFile(sourceDesktopBridgePath, stagedDesktopBridgePath);
+    await fs.writeFile(stagedIndexPath, updatedIndexHtml);
 }
 
 async function resolveNvmScript() {
@@ -139,6 +182,7 @@ export async function stageCyberChefBuild() {
     await fs.rm(stagedDistDir, {recursive: true, force: true});
     await fs.mkdir(path.dirname(stagedDistDir), {recursive: true});
     await fs.cp(sourceDir, stagedDistDir, {recursive: true});
+    await applyWrapperOverrides();
 }
 
 export async function validateStagedDist() {

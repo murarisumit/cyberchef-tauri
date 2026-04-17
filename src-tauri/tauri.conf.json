@@ -4,7 +4,8 @@
     "beforeBuildCommand": "node ./scripts/build-cyberchef.mjs",
     "beforeDevCommand": "node ./scripts/dev-cyberchef.mjs",
     "devPath": "http://127.0.0.1:8080/",
-    "distDir": "../.artifacts/cyberchef-dist"
+    "distDir": "../.artifacts/cyberchef-dist",
+    "withGlobalTauri": true
   },
   "package": {
     "productName": "CyberChef",

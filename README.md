@@ -90,3 +90,5 @@ src-tauri/target/release/bundle/macos/*.dmg
 
 - Update and release workflow:
   [docs/UPDATING.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/UPDATING.md)
+- Wrapper-owned CyberChef customizations to review on vendor updates:
+  [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)

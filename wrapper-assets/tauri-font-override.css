@@ -1,0 +1,26 @@
+:root,
+:root.classic,
+:root.solarizedLight,
+:root.solarizedDark {
+    --primary-font-family: "Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode",
+        "Segoe UI", Arial, sans-serif;
+    --font-family-sans-serif: "Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode",
+        "Segoe UI", Arial, sans-serif;
+}
+
+html,
+body {
+    font-family: var(--primary-font-family) !important;
+}
+
+body *:not(.material-icons):not(.material-icons *):not(.cm-editor):not(.cm-editor *):not(code):not(pre) {
+    font-family: var(--primary-font-family) !important;
+}
+
+.cm-editor,
+.cm-editor *,
+code,
+pre,
+.data-text {
+    font-family: var(--fixed-width-font-family) !important;
+}

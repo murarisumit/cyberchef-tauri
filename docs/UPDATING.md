@@ -50,13 +50,27 @@ npm run vendor:add
    npm run release:meta
    ```
 
-4. Build the desktop app:
+4. Review wrapper-specific customizations before building:
+
+   - Read
+     [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)
+   - Re-check save/load recipe behavior in the desktop app
+   - Re-check wrapper-injected styling and any other desktop-only behavior
+
+5. Build the desktop app:
 
    ```bash
    npm run tauri build
    ```
 
-5. Commit the update:
+6. Manually sanity-check the built app:
+
+   - app launches successfully
+   - wrapper assets are still injected into the staged dist
+   - font override still looks intentional
+   - desktop recipe save/load/delete still works
+
+7. Commit the update:
 
    ```bash
    git commit -am "chore(vendor): update CyberChef to <version>"
@@ -157,3 +171,10 @@ v<app-version>-cyberchef.<cyberchef-version>
 - `npm run tauri build` fails after a vendor update:
   Treat that as a real integration issue between wrapper and vendored CyberChef,
   not as a release-tagging problem.
+
+- Desktop-only wrapper behavior regresses after a vendor update:
+  Compare the updated upstream save/load modal markup, event wiring, and
+  compiled CSS against
+  [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)
+  and adjust the wrapper-owned integration points rather than patching the
+  vendored dist output by hand.
