@@ -126,15 +126,15 @@ image, and publish a GitHub release.
 
 ## Downloadable GitHub Artifacts
 
-- `.github/workflows/ci.yml` uploads a downloadable `CyberChef-ci-macos.dmg`
-  artifact only on pushes to `main` or `master`. Pull requests still run the
-  validation path without packaging the DMG.
 - `.github/workflows/release.yml` uploads a downloadable release artifact on the
   workflow run and also publishes the same DMG as a GitHub release asset for
   tag-based releases.
 - `.github/workflows/cyberchef-upstream-build.yml` runs daily, checks the
   current upstream CyberChef HEAD, and only builds a fresh DMG artifact when
   the vendored commit is behind.
+- `.github/workflows/ci.yml` is a fast validation-only workflow that checks
+  release metadata and wrapper customization markers without installing
+  vendored dependencies, building the app, or uploading artifacts.
 
 Tauri writes the macOS disk image into:
 

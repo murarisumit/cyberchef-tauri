@@ -82,8 +82,9 @@ src-tauri/target/release/bundle/dmg/*.dmg
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`: macOS validation on pushes and pull requests
-- `.github/workflows/ci.yml` only builds and uploads the DMG on pushes to
-  `main` or `master`
+- `.github/workflows/ci.yml` runs lightweight metadata and wrapper
+  customization checks only; it does not install vendored dependencies, build
+  the app, or publish artifacts
 - `.github/workflows/release.yml`: tag-driven macOS release build
 - `.github/workflows/cyberchef-upstream-build.yml`: daily upstream check that
   builds a DMG when CyberChef has moved upstream

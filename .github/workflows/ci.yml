@@ -10,42 +10,14 @@ on:
 jobs:
   macos-build:
     runs-on: macos-latest
-    env:
-      CYBERCHEF_SKIP_NVM: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: vendor/cyberchef/.nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            vendor/cyberchef/package-lock.json
-
       - name: Capture Node Version
         id: node_info
         run: echo "version=$(node -v)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Rust
-        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master')
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master')
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install Wrapper Dependencies
-        run: npm ci
-
-      - name: Install Vendored CyberChef Dependencies
-        id: prepare
-        run: npm run prepare:cyberchef
 
       - name: Print Release Metadata
         id: meta
@@ -55,30 +27,9 @@ jobs:
         id: release_check
         run: npm run release:check
 
-      - name: Doctor
-        id: doctor
-        run: npm run doctor
-
-      - name: Build Desktop App
-        id: build
-        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master')
-        run: npm run tauri build
-
-      - name: Collect DMG Artifact
-        id: collect_artifact
-        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master')
-        run: |
-          dmg_path="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$dmg_path"
-          cp "$dmg_path" CyberChef-ci-macos.dmg
-
-      - name: Upload macOS App Artifact
-        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'master')
-        uses: actions/upload-artifact@v7
-        with:
-          name: CyberChef-ci-macos
-          path: CyberChef-ci-macos.dmg
-          if-no-files-found: error
+      - name: Validate Wrapper Customizations
+        id: wrapper_check
+        run: npm run wrapper:check
 
       - name: Write Job Summary
         if: always()
@@ -91,15 +42,8 @@ jobs:
             echo "- CyberChef version: \`${{ steps.meta.outputs.cyberchef_version }}\`"
             echo "- Expected release tag: \`${{ steps.meta.outputs.release_tag }}\`"
             echo "- Vendored commit: \`${{ steps.meta.outputs.vendor_commit }}\`"
-            echo "- Prepare vendored dependencies: \`${{ steps.prepare.conclusion }}\`"
             echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
-            echo "- Doctor: \`${{ steps.doctor.conclusion }}\`"
-            echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
-            echo "- Artifact collection: \`${{ steps.collect_artifact.conclusion }}\`"
+            echo "- Wrapper customization check: \`${{ steps.wrapper_check.conclusion }}\`"
             echo "- Job result: \`${{ job.status }}\`"
-            if [ "${{ github.event_name }}" != "push" ] || { [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_name }}" != "master" ]; }; then
-              echo "- Packaging: skipped unless this is a push to \`main\` or \`master\`"
-            elif [ "${{ steps.collect_artifact.conclusion }}" = "success" ]; then
-              echo "- Artifact: \`CyberChef-ci-macos.dmg\`"
-            fi
+            echo "- Packaging: skipped in CI; release workflows handle builds and artifacts"
           } >> "$GITHUB_STEP_SUMMARY"
