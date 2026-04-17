@@ -80,32 +80,41 @@ npm run vendor:add
 
 If the update is also a release:
 
-1. Bump the app version in:
+1. Cut the release with the helper script:
+
+   Auto-increment the patch version:
+
+   ```bash
+   npm run release:cut
+   ```
+
+   Or set an explicit app version:
+
+   ```bash
+   npm run release:cut -- 0.2.0
+   ```
+
+   This script will:
+
+   - bump or set the app version
+   - update `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json`
+   - run `npm run release:check`
+   - create the release commit
+   - create the annotated release tag
+
+2. If you want to inspect the next version without committing or tagging:
+
+   ```bash
+   npm run release:cut -- --dry-run
+   ```
+
+3. The helper script replaces the manual edits to:
 
    - `package.json`
+   - `package-lock.json`
    - `src-tauri/tauri.conf.json`
 
-2. Re-run the checks:
-
-   ```bash
-   npm run release:check
-   npm run release:meta
-   ```
-
-3. Commit the release:
-
-   ```bash
-   git commit -am "chore(release): app <app-version> with CyberChef <cyberchef-version>"
-   ```
-
-4. Create the release tag:
-
-   ```bash
-   git tag -a v<app-version>-cyberchef.<cyberchef-version> \
-     -m "App <app-version> bundled with CyberChef <cyberchef-version>"
-   ```
-
-5. Push the branch and tag:
+4. Push the branch and tag:
 
    ```bash
    git push
