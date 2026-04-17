@@ -12,6 +12,7 @@ export const projectRoot = path.resolve(__dirname, "..");
 export const stagedDistDir = path.join(projectRoot, ".artifacts", "cyberchef-dist");
 export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
+const currentNodeBinDir = path.dirname(process.execPath);
 
 function shellEscape(value) {
     return `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -83,9 +84,16 @@ export async function resolveCyberChefDir(options = {}) {
 }
 
 export async function runBash(command, cwd = projectRoot) {
+    const env = {
+        ...process.env,
+        NODE: process.execPath,
+        PATH: `${currentNodeBinDir}${path.delimiter}${process.env.PATH || ""}`,
+    };
+
     await new Promise((resolve, reject) => {
-        const child = spawn("bash", ["-lc", command], {
+        const child = spawn("bash", ["-c", command], {
             cwd,
+            env,
             stdio: "inherit",
         });
 
