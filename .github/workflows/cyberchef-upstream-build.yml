@@ -91,7 +91,7 @@ jobs:
         id: collect_artifact
         if: steps.upstream.outputs.updated == 'true'
         run: |
-          dmg_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.dmg' -print -quit)"
+          dmg_path="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$dmg_path"
           cp "$dmg_path" CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg
 
