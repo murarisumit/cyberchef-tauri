@@ -13,12 +13,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: vendor/cyberchef/.nvmrc
           cache: npm
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload Upstream Build Artifact
         if: steps.upstream.outputs.updated == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos
           path: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg
