@@ -118,7 +118,8 @@ image, and publish a GitHub release.
 ## Downloadable GitHub Artifacts
 
 - `.github/workflows/ci.yml` uploads a downloadable `CyberChef-ci-macos.dmg`
-  artifact on push and pull request runs.
+  artifact only on pushes to `main` or `master`. Pull requests still run the
+  validation path without packaging the DMG.
 - `.github/workflows/release.yml` uploads a downloadable release artifact on the
   workflow run and also publishes the same DMG as a GitHub release asset for
   tag-based releases.
