@@ -8,6 +8,8 @@ on:
 jobs:
   build-on-upstream-update:
     runs-on: macos-latest
+    env:
+      CYBERCHEF_SKIP_NVM: "1"
 
     steps:
       - name: Checkout
@@ -18,7 +20,15 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: vendor/cyberchef/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/cyberchef/package-lock.json
+
+      - name: Capture Check Node Version
+        id: check_node
+        run: echo "version=$(node -v)" >> "$GITHUB_OUTPUT"
 
       - name: Check CyberChef Upstream
         id: upstream
@@ -46,42 +56,39 @@ jobs:
         run: npm ci
 
       - name: Update Vendored CyberChef
+        id: update_vendor
         if: steps.upstream.outputs.updated == 'true'
         env:
           CYBERCHEF_SUBTREE_REF: ${{ steps.upstream.outputs.upstream_ref }}
         run: npm run vendor:pull
 
-      - name: Setup Build Node
-        if: steps.upstream.outputs.updated == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: vendor/cyberchef/.nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            vendor/cyberchef/package-lock.json
-
       - name: Install Vendored CyberChef Dependencies
+        id: prepare
         if: steps.upstream.outputs.updated == 'true'
         run: npm run prepare:cyberchef
 
       - name: Print Release Metadata
+        id: meta
         if: steps.upstream.outputs.updated == 'true'
-        run: node ./scripts/release-metadata.mjs
+        run: node ./scripts/release-metadata.mjs --github-output
 
       - name: Validate Release Metadata
+        id: release_check
         if: steps.upstream.outputs.updated == 'true'
         run: npm run release:check
 
       - name: Doctor
+        id: doctor
         if: steps.upstream.outputs.updated == 'true'
         run: npm run doctor
 
       - name: Build Desktop App
+        id: build
         if: steps.upstream.outputs.updated == 'true'
         run: npm run tauri build
 
       - name: Collect DMG Artifact
+        id: collect_artifact
         if: steps.upstream.outputs.updated == 'true'
         run: |
           dmg_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.dmg' -print -quit)"
@@ -95,3 +102,36 @@ jobs:
           name: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos
           path: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg
           if-no-files-found: error
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          {
+            echo "## CyberChef Upstream Build Summary"
+            echo
+            echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- Check node: \`${{ steps.check_node.outputs.version }}\`"
+            echo "- Upstream remote: \`${{ steps.upstream.outputs.upstream_remote }}\`"
+            echo "- Upstream ref: \`${{ steps.upstream.outputs.upstream_ref }}\`"
+            echo "- Vendored commit before run: \`${{ steps.upstream.outputs.current_commit }}\`"
+            echo "- Upstream commit: \`${{ steps.upstream.outputs.upstream_commit }}\`"
+            if [ "${{ steps.upstream.outputs.updated }}" != "true" ]; then
+              echo "- Decision: no upstream change detected, build skipped"
+            else
+              echo "- Decision: upstream changed, build triggered"
+              echo "- Build node: \`${{ steps.check_node.outputs.version }}\`"
+              echo "- App version: \`${{ steps.meta.outputs.app_version }}\`"
+              echo "- CyberChef version: \`${{ steps.meta.outputs.cyberchef_version }}\`"
+              echo "- Release tag: \`${{ steps.meta.outputs.release_tag }}\`"
+              echo "- Update vendor subtree: \`${{ steps.update_vendor.conclusion }}\`"
+              echo "- Prepare vendored dependencies: \`${{ steps.prepare.conclusion }}\`"
+              echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
+              echo "- Doctor: \`${{ steps.doctor.conclusion }}\`"
+              echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
+              echo "- Artifact collection: \`${{ steps.collect_artifact.conclusion }}\`"
+              if [ "${{ steps.collect_artifact.conclusion }}" = "success" ]; then
+                echo "- Artifact: \`CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg\`"
+              fi
+            fi
+            echo "- Job result: \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

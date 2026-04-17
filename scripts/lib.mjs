@@ -40,6 +40,28 @@ async function resolveNvmScript() {
     return null;
 }
 
+async function readNvmrc(cyberChefDir) {
+    try {
+        return (await fs.readFile(path.join(cyberChefDir, ".nvmrc"), "utf8")).trim();
+    } catch {
+        return null;
+    }
+}
+
+function resolveNodeMajor(version) {
+    const match = String(version || "").trim().match(/^v?(\d+)(?:\..*)?$/);
+    return match ? match[1] : null;
+}
+
+function currentNodeMatchesNvmrc(nvmrcValue) {
+    const requestedMajor = resolveNodeMajor(nvmrcValue);
+    const currentMajor = resolveNodeMajor(process.version);
+
+    if (!requestedMajor || !currentMajor) return false;
+
+    return requestedMajor === currentMajor;
+}
+
 export async function resolveCyberChefDir(options = {}) {
     const {optional = false} = options;
     const configured = process.env.CYBERCHEF_DIR;
@@ -79,12 +101,16 @@ export async function runBash(command, cwd = projectRoot) {
 export async function runInCyberChefShell(command) {
     const cyberChefDir = await resolveCyberChefDir();
     const nvmScript = await resolveNvmScript();
-    const nvmrcPath = path.join(cyberChefDir, ".nvmrc");
-    const hasNvmrc = await pathExists(nvmrcPath);
+    const nvmrcValue = await readNvmrc(cyberChefDir);
+    const shouldUseNvm =
+        Boolean(nvmrcValue) &&
+        Boolean(nvmScript) &&
+        process.env.CYBERCHEF_SKIP_NVM !== "1" &&
+        !currentNodeMatchesNvmrc(nvmrcValue);
 
     const steps = [`cd ${shellEscape(cyberChefDir)}`];
 
-    if (hasNvmrc && nvmScript) {
+    if (shouldUseNvm) {
         steps.unshift(`source ${shellEscape(nvmScript)}`);
         steps.push("nvm use >/dev/null");
     }

@@ -12,6 +12,8 @@ permissions:
 jobs:
   macos-release:
     runs-on: macos-latest
+    env:
+      CYBERCHEF_SKIP_NVM: "1"
 
     steps:
       - name: Checkout
@@ -26,6 +28,10 @@ jobs:
             package-lock.json
             vendor/cyberchef/package-lock.json
 
+      - name: Capture Node Version
+        id: node_info
+        run: echo "version=$(node -v)" >> "$GITHUB_OUTPUT"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -38,6 +44,7 @@ jobs:
         run: npm ci
 
       - name: Install Vendored CyberChef Dependencies
+        id: prepare
         run: npm run prepare:cyberchef
 
       - name: Read Release Metadata
@@ -45,14 +52,17 @@ jobs:
         run: node ./scripts/release-metadata.mjs --github-output
 
       - name: Validate Release Metadata
+        id: release_check
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
         run: npm run release:check
 
       - name: Build Desktop App
+        id: build
         run: npm run tauri build
 
       - name: Collect DMG Artifact
+        id: collect_artifact
         run: |
           dmg_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$dmg_path"
@@ -77,3 +87,24 @@ jobs:
             App version: `${{ steps.meta.outputs.app_version }}`
             Vendored CyberChef version: `${{ steps.meta.outputs.cyberchef_version }}`
             Vendored CyberChef commit: `${{ steps.meta.outputs.vendor_commit }}`
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          {
+            echo "## Release Summary"
+            echo
+            echo "- Node: \`${{ steps.node_info.outputs.version }}\`"
+            echo "- App version: \`${{ steps.meta.outputs.app_version }}\`"
+            echo "- CyberChef version: \`${{ steps.meta.outputs.cyberchef_version }}\`"
+            echo "- Release tag: \`${{ steps.meta.outputs.release_tag }}\`"
+            echo "- Vendored commit: \`${{ steps.meta.outputs.vendor_commit }}\`"
+            echo "- Prepare vendored dependencies: \`${{ steps.prepare.conclusion }}\`"
+            echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
+            echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
+            echo "- Artifact collection: \`${{ steps.collect_artifact.conclusion }}\`"
+            echo "- Job result: \`${{ job.status }}\`"
+            if [ "${{ steps.collect_artifact.conclusion }}" = "success" ]; then
+              echo "- Artifact: \`CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
