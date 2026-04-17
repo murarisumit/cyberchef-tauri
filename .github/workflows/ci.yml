@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  macos-build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vendor/cyberchef/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/cyberchef/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Wrapper Dependencies
+        run: npm ci
+
+      - name: Install Vendored CyberChef Dependencies
+        run: npm run prepare:cyberchef
+
+      - name: Print Release Metadata
+        run: node ./scripts/release-metadata.mjs
+
+      - name: Validate Release Metadata
+        run: npm run release:check
+
+      - name: Doctor
+        run: npm run doctor
+
+      - name: Build Desktop App
+        run: npm run tauri build
+
+      - name: Upload macOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberChef.app
+          path: src-tauri/target/release/bundle/macos/CyberChef.app
+          if-no-files-found: error

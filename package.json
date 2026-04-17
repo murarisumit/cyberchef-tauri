@@ -1,0 +1,23 @@
+{
+  "name": "cyberchef-tauri-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Separate Tauri wrapper for a local CyberChef checkout",
+  "license": "Apache-2.0",
+  "scripts": {
+    "doctor": "node ./scripts/doctor.mjs",
+    "release:check": "node ./scripts/release-check.mjs",
+    "release:meta": "node ./scripts/release-metadata.mjs",
+    "vendor:add": "node ./scripts/vendor-subtree.mjs add",
+    "vendor:pull": "node ./scripts/vendor-subtree.mjs pull",
+    "vendor:cyberchef": "node ./scripts/vendor-cyberchef.mjs",
+    "prepare:cyberchef": "node ./scripts/prepare-cyberchef.mjs",
+    "build:web": "node ./scripts/build-cyberchef.mjs",
+    "dev:web": "node ./scripts/dev-cyberchef.mjs",
+    "sync:icons": "node ./scripts/sync-icons.mjs",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6.3"
+  }
+}

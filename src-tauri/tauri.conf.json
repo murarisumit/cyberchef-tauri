@@ -1,0 +1,68 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeBuildCommand": "node ./scripts/build-cyberchef.mjs",
+    "beforeDevCommand": "node ./scripts/dev-cyberchef.mjs",
+    "devPath": "http://127.0.0.1:8080/",
+    "distDir": "../.artifacts/cyberchef-dist"
+  },
+  "package": {
+    "productName": "CyberChef",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false
+    },
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "copyright": "Crown Copyright",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "identifier": "dev.sumit.cyberchef",
+      "longDescription": "CyberChef desktop app packaged from a vendored local source checkout.",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "resources": [],
+      "shortDescription": "CyberChef desktop wrapper",
+      "targets": [
+        "app"
+      ],
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 900,
+        "resizable": true,
+        "title": "CyberChef",
+        "width": 1440
+      }
+    ]
+  }
+}

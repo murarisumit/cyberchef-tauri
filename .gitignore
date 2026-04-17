@@ -1,0 +1,11 @@
+node_modules
+.artifacts
+src-tauri/target
+.env
+vendor/cyberchef/node_modules
+vendor/cyberchef/build
+vendor/cyberchef/src-tauri/target
+vendor/cyberchef/src/core/config/modules/
+vendor/cyberchef/src/core/config/OperationConfig.json
+vendor/cyberchef/src/core/operations/index.mjs
+*.log

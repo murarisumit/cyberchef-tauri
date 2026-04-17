@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vendor/cyberchef/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/cyberchef/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Wrapper Dependencies
+        run: npm ci
+
+      - name: Install Vendored CyberChef Dependencies
+        run: npm run prepare:cyberchef
+
+      - name: Read Release Metadata
+        id: meta
+        run: node ./scripts/release-metadata.mjs --github-output
+
+      - name: Validate Release Metadata
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: npm run release:check
+
+      - name: Build Desktop App
+        run: npm run tauri build
+
+      - name: Archive macOS App
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            src-tauri/target/release/bundle/macos/CyberChef.app \
+            CyberChef-${{ steps.meta.outputs.release_tag }}-macos.zip
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberChef-${{ steps.meta.outputs.release_tag }}-macos
+          path: CyberChef-${{ steps.meta.outputs.release_tag }}-macos.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.meta.outputs.release_name }}
+          tag_name: ${{ github.ref_name }}
+          files: CyberChef-${{ steps.meta.outputs.release_tag }}-macos.zip
+          generate_release_notes: true
+          body: |
+            App version: `${{ steps.meta.outputs.app_version }}`
+            Vendored CyberChef version: `${{ steps.meta.outputs.cyberchef_version }}`
+            Vendored CyberChef commit: `${{ steps.meta.outputs.vendor_commit }}`
