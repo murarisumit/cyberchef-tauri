@@ -108,6 +108,9 @@ image, and publish a GitHub release.
 - `.github/workflows/release.yml` uploads a downloadable release artifact on the
   workflow run and also publishes the same DMG as a GitHub release asset for
   tag-based releases.
+- `.github/workflows/cyberchef-upstream-build.yml` runs daily, checks the
+  current upstream CyberChef HEAD, and only builds a fresh DMG artifact when
+  the vendored commit is behind.
 
 ## Bootstrap or Recovery Path
 

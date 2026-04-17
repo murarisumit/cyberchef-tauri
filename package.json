@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "doctor": "node ./scripts/doctor.mjs",
+    "vendor:check-update": "node ./scripts/check-cyberchef-update.mjs",
     "release:check": "node ./scripts/release-check.mjs",
     "release:meta": "node ./scripts/release-metadata.mjs",
     "vendor:add": "node ./scripts/vendor-subtree.mjs add",

@@ -1,0 +1,97 @@
+name: CyberChef Upstream Build
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  build-on-upstream-update:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check CyberChef Upstream
+        id: upstream
+        run: node ./scripts/check-cyberchef-update.mjs --github-output
+
+      - name: Skip When No Upstream Update Exists
+        if: steps.upstream.outputs.updated != 'true'
+        run: |
+          echo "No CyberChef update detected."
+          echo "Vendored commit: ${{ steps.upstream.outputs.current_commit }}"
+          echo "Upstream commit: ${{ steps.upstream.outputs.upstream_commit }}"
+
+      - name: Setup Rust
+        if: steps.upstream.outputs.updated == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        if: steps.upstream.outputs.updated == 'true'
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Wrapper Dependencies
+        if: steps.upstream.outputs.updated == 'true'
+        run: npm ci
+
+      - name: Update Vendored CyberChef
+        if: steps.upstream.outputs.updated == 'true'
+        env:
+          CYBERCHEF_SUBTREE_REF: ${{ steps.upstream.outputs.upstream_ref }}
+        run: npm run vendor:pull
+
+      - name: Setup Build Node
+        if: steps.upstream.outputs.updated == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vendor/cyberchef/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/cyberchef/package-lock.json
+
+      - name: Install Vendored CyberChef Dependencies
+        if: steps.upstream.outputs.updated == 'true'
+        run: npm run prepare:cyberchef
+
+      - name: Print Release Metadata
+        if: steps.upstream.outputs.updated == 'true'
+        run: node ./scripts/release-metadata.mjs
+
+      - name: Validate Release Metadata
+        if: steps.upstream.outputs.updated == 'true'
+        run: npm run release:check
+
+      - name: Doctor
+        if: steps.upstream.outputs.updated == 'true'
+        run: npm run doctor
+
+      - name: Build Desktop App
+        if: steps.upstream.outputs.updated == 'true'
+        run: npm run tauri build
+
+      - name: Collect DMG Artifact
+        if: steps.upstream.outputs.updated == 'true'
+        run: |
+          dmg_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          cp "$dmg_path" CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg
+
+      - name: Upload Upstream Build Artifact
+        if: steps.upstream.outputs.updated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos
+          path: CyberChef-upstream-${{ steps.upstream.outputs.upstream_commit }}-macos.dmg
+          if-no-files-found: error
