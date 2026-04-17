@@ -45,6 +45,8 @@ The intended long-term update model is a git subtree, so this repository
 remains the source of truth and upstream refreshes become one repo-local
 command.
 
+The most common maintenance path is documented in [docs/UPDATING.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/UPDATING.md).
+
 Recommended one-time setup:
 
 ```bash
@@ -147,6 +149,9 @@ CYBERCHEF_DIR=/absolute/path/to/CyberChef npm run build:web
 
 ## Release Flow
 
+The dedicated update and release guide lives in
+[docs/UPDATING.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/UPDATING.md).
+
 The canonical release tag is derived from both versions:
 
 ```bash
@@ -194,7 +199,7 @@ Recommended release sequence:
    ```
 
 5. Push the branch and tag. The release workflow will validate the tag, build the
-   macOS app, zip it, and publish a GitHub release.
+   macOS DMG, and publish a GitHub release.
 
 ## GitHub Actions
 
@@ -218,14 +223,14 @@ steps.
 
 - The wrapper project can build a local macOS `.app` from vendored CyberChef
   source in this repository.
-- The bundle output is currently:
+- The primary installer output is currently:
 
   ```bash
-  src-tauri/target/release/bundle/macos/CyberChef.app
+  src-tauri/target/release/bundle/macos/*.dmg
   ```
 
-- The wrapper is currently configured for app-only macOS bundling, not DMG
-  packaging.
+- The wrapper is configured to emit both a macOS `.app` bundle and a `.dmg`
+  installer, with the DMG used as the downloadable GitHub artifact.
 
 ## Notes
 
