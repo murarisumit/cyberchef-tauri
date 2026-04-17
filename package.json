@@ -10,6 +10,7 @@
     "release:check": "node ./scripts/release-check.mjs",
     "release:meta": "node ./scripts/release-metadata.mjs",
     "release:cut": "node ./scripts/release-cut.mjs",
+    "wrapper:check": "node ./scripts/wrapper-check.mjs",
     "vendor:add": "node ./scripts/vendor-subtree.mjs add",
     "vendor:pull": "node ./scripts/vendor-subtree.mjs pull",
     "vendor:cyberchef": "node ./scripts/vendor-cyberchef.mjs",
