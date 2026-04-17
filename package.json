@@ -1,6 +1,6 @@
 {
   "name": "cyberchef-tauri-wrapper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Separate Tauri wrapper for a local CyberChef checkout",
   "license": "Apache-2.0",
