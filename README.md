@@ -76,7 +76,7 @@ repository.
 The primary macOS installer output is:
 
 ```bash
-src-tauri/target/release/bundle/macos/*.dmg
+src-tauri/target/release/bundle/dmg/*.dmg
 ```
 
 ## GitHub Actions

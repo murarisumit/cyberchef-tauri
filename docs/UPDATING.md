@@ -126,6 +126,12 @@ image, and publish a GitHub release.
   current upstream CyberChef HEAD, and only builds a fresh DMG artifact when
   the vendored commit is behind.
 
+Tauri writes the macOS disk image into:
+
+```bash
+src-tauri/target/release/bundle/dmg/*.dmg
+```
+
 ## Bootstrap or Recovery Path
 
 If subtree state is not ready yet, you can refresh the vendor directory from a
