@@ -1199,6 +1199,11 @@ fn open_settings_window_for(source_window: &tauri::Window) -> Result<(), String>
     Ok(())
 }
 
+// The legacy `objc` macros used by the Tauri 1 / Wry macOS stack still expand
+// a `cargo-clippy` cfg, which triggers Rust's `unexpected_cfgs` lint on recent
+// toolchains. Keep the suppression scoped to this helper until the upstream
+// dependency chain moves off `objc` 0.2.x.
+#[allow(unexpected_cfgs)]
 #[cfg(target_os = "macos")]
 fn attach_window_as_native_tab(
     source_window: &tauri::Window,
