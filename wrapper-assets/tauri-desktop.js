@@ -165,12 +165,111 @@
         return options;
     }
 
-    function normaliseSession(session) {
-        if (!session || typeof session !== "object" || Array.isArray(session)) {
-            return {};
+    function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer || 0);
+        let binary = "";
+        const chunkSize = 0x8000;
+
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+            const chunk = bytes.subarray(offset, offset + chunkSize);
+            binary += String.fromCharCode(...chunk);
         }
 
-        return session;
+        return window.btoa(binary);
+    }
+
+    function base64ToArrayBuffer(base64) {
+        const binary = window.atob(base64 || "");
+        const bytes = new Uint8Array(binary.length);
+
+        for (let index = 0; index < binary.length; index++) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+
+        return bytes.buffer;
+    }
+
+    function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+    }
+
+    function defaultSessionTab() {
+        return {
+            inputBase64: "",
+            inputChrEnc: 0,
+            inputEol: "LF",
+            outputChrEnc: 0,
+            outputEol: "LF",
+            inputType: "userinput",
+            fileName: "",
+            stringSample: "",
+            inputText: "",
+        };
+    }
+
+    function normaliseSessionTab(tab) {
+        const defaults = defaultSessionTab();
+        const candidate = tab && typeof tab === "object" && !Array.isArray(tab) ? tab : {};
+
+        return {
+            inputBase64: typeof candidate.inputBase64 === "string" ? candidate.inputBase64 : defaults.inputBase64,
+            inputChrEnc: typeof candidate.inputChrEnc === "number" ? candidate.inputChrEnc : defaults.inputChrEnc,
+            inputEol: typeof candidate.inputEol === "string" && eolCodeToSequence[candidate.inputEol] ?
+                candidate.inputEol :
+                defaults.inputEol,
+            outputChrEnc: typeof candidate.outputChrEnc === "number" ? candidate.outputChrEnc : defaults.outputChrEnc,
+            outputEol: typeof candidate.outputEol === "string" && eolCodeToSequence[candidate.outputEol] ?
+                candidate.outputEol :
+                defaults.outputEol,
+            inputType: typeof candidate.inputType === "string" ? candidate.inputType : defaults.inputType,
+            fileName: typeof candidate.fileName === "string" ? candidate.fileName : defaults.fileName,
+            stringSample: typeof candidate.stringSample === "string" ? candidate.stringSample : defaults.stringSample,
+            inputText: typeof candidate.inputText === "string" ? candidate.inputText : defaults.inputText,
+        };
+    }
+
+    function normaliseSession(session) {
+        if (!session || typeof session !== "object" || Array.isArray(session)) {
+            return {
+                recipe: [],
+                tabs: [defaultSessionTab()],
+                activeTab: 1,
+                activeOutputTab: 1,
+                autoBake: true,
+            };
+        }
+
+        const legacyTab = {
+            inputText: typeof session.input === "string" ? session.input : "",
+            inputChrEnc: typeof session.inputChrEnc === "number" ? session.inputChrEnc : 0,
+            inputEol: typeof session.inputEol === "string" ? session.inputEol : "LF",
+            outputChrEnc: typeof session.outputChrEnc === "number" ? session.outputChrEnc : 0,
+            outputEol: typeof session.outputEol === "string" ? session.outputEol : "LF",
+            stringSample: typeof session.input === "string" ? session.input.slice(0, 4096) : "",
+        };
+
+        const tabs = Array.isArray(session.tabs) && session.tabs.length > 0 ?
+            session.tabs.map(normaliseSessionTab) :
+            [normaliseSessionTab(legacyTab)];
+        const maxTab = tabs.length;
+        const activeTab = clamp(
+            typeof session.activeTab === "number" ? session.activeTab : 1,
+            1,
+            maxTab
+        );
+        const activeOutputTab = clamp(
+            typeof session.activeOutputTab === "number" ? session.activeOutputTab : activeTab,
+            1,
+            maxTab
+        );
+
+        return {
+            recipe: Array.isArray(session.recipe) ? session.recipe : [],
+            tabs,
+            activeTab,
+            activeOutputTab,
+            autoBake: typeof session.autoBake === "boolean" ? session.autoBake : true,
+        };
     }
 
     async function persistFavoritesToDisk(favorites, options = {}) {
@@ -272,35 +371,89 @@
         return reloadSettingsPromise;
     }
 
-    function collectSessionState() {
-        if (!window.app || !window.app.manager) return null;
+    async function getInputTabNumbers() {
+        if (!window.app || !window.app.manager || !window.app.manager.input) {
+            return [1];
+        }
+
+        const result = await window.app.manager.input.getInputNums();
+        const inputNums = result && Array.isArray(result.inputNums) ?
+            result.inputNums
+                .map(inputNum => Number(inputNum))
+                .filter(inputNum => Number.isFinite(inputNum) && inputNum > 0)
+                .sort((left, right) => left - right) :
+            [];
+
+        return inputNums.length > 0 ? inputNums : [1];
+    }
+
+    async function waitForTabCount(expectedCount, maxAttempts = 80) {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const inputNums = await getInputTabNumbers();
+
+            if (inputNums.length === expectedCount) {
+                return inputNums;
+            }
+
+            await new Promise(resolve => window.setTimeout(resolve, 25));
+        }
+
+        throw new Error(`Timed out while waiting for ${expectedCount} input tab(s).`);
+    }
+
+    async function collectSessionTabs() {
+        const inputNums = await getInputTabNumbers();
+        const outputTabs = window.app.manager.output && window.app.manager.output.outputs ?
+            window.app.manager.output.outputs :
+            {};
+        const tabs = [];
 
         const recipe = typeof window.app.getRecipeConfig === "function" ?
             window.app.getRecipeConfig() :
             [];
-        const input = window.app.manager.input && typeof window.app.manager.input.getInput === "function" ?
-            window.app.manager.input.getInput() :
-            "";
-        const inputChrEnc = window.app.manager.input && typeof window.app.manager.input.getChrEnc === "function" ?
-            window.app.manager.input.getChrEnc() :
-            0;
-        const outputChrEnc = window.app.manager.output && typeof window.app.manager.output.getChrEnc === "function" ?
-            window.app.manager.output.getChrEnc() :
-            0;
-        const inputEol = window.app.manager.input && typeof window.app.manager.input.getEOLSeq === "function" ?
-            eolSequenceToCode[window.app.manager.input.getEOLSeq()] || "LF" :
-            "LF";
-        const outputEol = window.app.manager.output && typeof window.app.manager.output.getEOLSeq === "function" ?
-            eolSequenceToCode[window.app.manager.output.getEOLSeq()] || "LF" :
-            "LF";
+
+        for (const inputNum of inputNums) {
+            const inputObj = await window.app.manager.input.getInputObj(inputNum);
+            const buffer = inputObj && inputObj.buffer instanceof ArrayBuffer ? inputObj.buffer : new ArrayBuffer(0);
+            const outputTab = outputTabs[inputNum] || {};
+
+            tabs.push({
+                inputBase64: arrayBufferToBase64(buffer),
+                inputChrEnc: typeof inputObj?.encoding === "number" ? inputObj.encoding : 0,
+                inputEol: eolSequenceToCode[inputObj?.eolSequence] || "LF",
+                outputChrEnc: typeof outputTab.encoding === "number" ? outputTab.encoding : 0,
+                outputEol: eolSequenceToCode[outputTab.eolSequence] || "LF",
+                inputType: typeof inputObj?.type === "string" ? inputObj.type : "userinput",
+                fileName: typeof inputObj?.file?.name === "string" ? inputObj.file.name : "",
+                stringSample: typeof inputObj?.stringSample === "string" ? inputObj.stringSample : "",
+            });
+        }
 
         return {
             recipe,
-            input,
-            inputChrEnc,
-            inputEol,
-            outputChrEnc,
-            outputEol,
+            inputNums,
+            tabs,
+        };
+    }
+
+    async function collectSessionState() {
+        if (!window.app || !window.app.manager) return null;
+
+        const sessionData = await collectSessionTabs();
+        const activeInputNum = window.app.manager.tabs && typeof window.app.manager.tabs.getActiveTab === "function" ?
+            window.app.manager.tabs.getActiveTab("input") :
+            1;
+        const activeOutputNum = window.app.manager.tabs && typeof window.app.manager.tabs.getActiveTab === "function" ?
+            window.app.manager.tabs.getActiveTab("output") :
+            activeInputNum;
+        const activeTab = sessionData.inputNums.indexOf(activeInputNum) + 1 || 1;
+        const activeOutputTab = sessionData.inputNums.indexOf(activeOutputNum) + 1 || activeTab;
+
+        return {
+            recipe: sessionData.recipe,
+            tabs: sessionData.tabs,
+            activeTab,
+            activeOutputTab,
             autoBake: Boolean(window.app.autoBake_),
         };
     }
@@ -319,6 +472,14 @@
         }
     }
 
+    async function persistCurrentSession() {
+        const session = await collectSessionState();
+
+        if (session) {
+            await persistSessionToDisk(session);
+        }
+    }
+
     function scheduleSessionSave() {
         if (sessionPersistenceSuspended) return;
 
@@ -328,17 +489,84 @@
 
         sessionSaveTimeout = window.setTimeout(() => {
             sessionSaveTimeout = null;
-            const session = collectSessionState();
-
-            if (session) {
-                void persistSessionToDisk(session);
-            }
+            void persistCurrentSession();
         }, 250);
+    }
+
+    function sessionTabToArrayBuffer(tab) {
+        if (typeof tab.inputBase64 === "string" && tab.inputBase64.length > 0) {
+            return base64ToArrayBuffer(tab.inputBase64);
+        }
+
+        if (typeof tab.inputText === "string" && tab.inputText.length > 0) {
+            return new TextEncoder().encode(tab.inputText).buffer;
+        }
+
+        return new ArrayBuffer(0);
+    }
+
+    async function restoreSessionTabs(session) {
+        const tabs = Array.isArray(session.tabs) && session.tabs.length > 0 ?
+            session.tabs :
+            [defaultSessionTab()];
+
+        window.app.manager.input.clearAllIoClick();
+        await waitForTabCount(1);
+
+        for (let tabCount = 2; tabCount <= tabs.length; tabCount++) {
+            window.app.manager.input.addInput(false);
+            await waitForTabCount(tabCount);
+        }
+
+        for (let index = 0; index < tabs.length; index++) {
+            const inputNum = index + 1;
+            const tab = tabs[index];
+            const buffer = sessionTabToArrayBuffer(tab);
+            const stringSample = typeof tab.stringSample === "string" && tab.stringSample.length > 0 ?
+                tab.stringSample :
+                typeof tab.inputText === "string" ?
+                    tab.inputText.slice(0, 4096) :
+                    "";
+
+            window.app.manager.input.inputWorker.postMessage({
+                action: "updateInputValue",
+                data: {
+                    inputNum,
+                    buffer,
+                    stringSample,
+                    encoding: tab.inputChrEnc,
+                    eolSequence: eolCodeToSequence[tab.inputEol] || "\n",
+                },
+            }, [buffer]);
+            window.app.manager.input.inputWorker.postMessage({
+                action: "updateTabHeader",
+                data: inputNum,
+            });
+
+            if (window.app.manager.output &&
+                window.app.manager.output.outputs &&
+                window.app.manager.output.outputs[inputNum]) {
+                window.app.manager.output.outputs[inputNum].encoding = tab.outputChrEnc;
+                window.app.manager.output.outputs[inputNum].eolSequence =
+                    eolCodeToSequence[tab.outputEol] || "\n";
+            }
+        }
+
+        const activeTab = clamp(session.activeTab, 1, tabs.length);
+        const activeOutputTab = clamp(session.activeOutputTab, 1, tabs.length);
+
+        window.app.manager.input.changeTab(activeTab, false);
+
+        if (window.app.manager.output) {
+            window.app.manager.output.changeTab(activeOutputTab, false);
+        }
+
+        await new Promise(resolve => window.setTimeout(resolve, 25));
     }
 
     async function applySessionState(rawSession) {
         const session = normaliseSession(rawSession);
-        const savedAutoBake = typeof session.autoBake === "boolean" ? session.autoBake : true;
+        const savedAutoBake = session.autoBake;
 
         if (!window.app || !window.app.manager) return;
 
@@ -349,33 +577,14 @@
                 window.app.manager.controls.setAutoBake(false);
             }
 
+            if (window.app.manager.recipe && typeof window.app.manager.recipe.clearRecipe === "function") {
+                window.app.manager.recipe.clearRecipe();
+            }
+
+            await restoreSessionTabs(session);
+
             if (typeof window.app.setRecipeConfig === "function") {
-                window.app.setRecipeConfig(Array.isArray(session.recipe) ? session.recipe : []);
-            }
-
-            if (window.app.manager.input) {
-                if (typeof session.inputEol === "string" && eolCodeToSequence[session.inputEol]) {
-                    window.app.manager.input.eolChange(session.inputEol, true);
-                }
-
-                if (typeof session.inputChrEnc === "number") {
-                    window.app.manager.input.chrEncChange(session.inputChrEnc, true, true);
-                }
-            }
-
-            if (typeof session.input === "string" && typeof window.app.setInput === "function") {
-                window.app.setInput(session.input);
-                await new Promise(resolve => window.setTimeout(resolve, 25));
-            }
-
-            if (window.app.manager.output) {
-                if (typeof session.outputEol === "string" && eolCodeToSequence[session.outputEol]) {
-                    await window.app.manager.output.eolChange(session.outputEol, true);
-                }
-
-                if (typeof session.outputChrEnc === "number") {
-                    await window.app.manager.output.chrEncChange(session.outputChrEnc, true);
-                }
+                window.app.setRecipeConfig(session.recipe);
             }
 
             if (window.app.manager.controls && typeof window.app.manager.controls.setAutoBake === "function") {
@@ -485,8 +694,29 @@
         }
 
         if (window.app.manager.input) {
+            const originalAddInput = window.app.manager.input.addInput.bind(window.app.manager.input);
+            const originalRemoveInput = window.app.manager.input.removeInput.bind(window.app.manager.input);
+            const originalChangeInputTab = window.app.manager.input.changeTab.bind(window.app.manager.input);
             const originalInputChrEncChange = window.app.manager.input.chrEncChange.bind(window.app.manager.input);
             const originalInputEolChange = window.app.manager.input.eolChange.bind(window.app.manager.input);
+
+            window.app.manager.input.addInput = function(...args) {
+                const result = originalAddInput(...args);
+                scheduleSessionSave();
+                return result;
+            };
+
+            window.app.manager.input.removeInput = function(...args) {
+                const result = originalRemoveInput(...args);
+                scheduleSessionSave();
+                return result;
+            };
+
+            window.app.manager.input.changeTab = function(...args) {
+                const result = originalChangeInputTab(...args);
+                scheduleSessionSave();
+                return result;
+            };
 
             window.app.manager.input.chrEncChange = function(...args) {
                 const result = originalInputChrEncChange(...args);
@@ -502,8 +732,15 @@
         }
 
         if (window.app.manager.output) {
+            const originalChangeOutputTab = window.app.manager.output.changeTab.bind(window.app.manager.output);
             const originalOutputChrEncChange = window.app.manager.output.chrEncChange.bind(window.app.manager.output);
             const originalOutputEolChange = window.app.manager.output.eolChange.bind(window.app.manager.output);
+
+            window.app.manager.output.changeTab = function(...args) {
+                const result = originalChangeOutputTab(...args);
+                scheduleSessionSave();
+                return result;
+            };
 
             window.app.manager.output.chrEncChange = async function(...args) {
                 const result = await originalOutputChrEncChange(...args);
@@ -531,6 +768,15 @@
             await listen("desktop://reload-settings", () => {
                 void reloadSettingsFromDisk({notify: true});
             });
+            await listen("desktop://config-dir-changed", async event => {
+                await reloadSettingsFromDisk();
+                await reloadFavoritesFromDisk();
+                await reloadSessionFromDisk({force: true});
+
+                if (typeof event.payload === "string" && event.payload.length > 0) {
+                    alertUser(`Config folder changed to ${event.payload}.`, 3500);
+                }
+            });
         }
     }
 
@@ -539,6 +785,12 @@
 
         installSessionBridge();
         await reloadSessionFromDisk();
+
+        if (typeof listen === "function") {
+            await listen("desktop://reload-session", () => {
+                void reloadSessionFromDisk({notify: true, force: true});
+            });
+        }
     }
 
     async function initialiseDesktopFavorites() {

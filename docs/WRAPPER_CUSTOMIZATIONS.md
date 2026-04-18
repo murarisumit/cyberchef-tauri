@@ -92,7 +92,7 @@ Behavior:
 - favourites are loaded from a desktop config file on startup
 - edits made through CyberChef's built-in favourites UI save back to that file
 - returning focus to the app reloads the config file
-- a native `Settings` menu holds desktop configuration actions such as opening the favorites folder in Finder and triggering a reload
+- the `Settings` menu can reload or reset favourites
 - the config file is created automatically with the default CyberChef favourites
 - default path is `~/.config/cyberchef/favorite.json`
 
@@ -126,7 +126,7 @@ Behavior:
 
 - options are loaded from a desktop config file during app startup
 - changes made through CyberChef's built-in options dialog save back to that file
-- the `Settings` menu exposes `Open Config Folder` and `Reload Settings`
+- the `Settings` menu can reload or reset settings
 - the options config file is created automatically with the current desktop defaults
 - default path is `~/.config/cyberchef/options.json`
 
@@ -158,15 +158,14 @@ app can restore the last active workspace on launch.
 
 Behavior:
 
-- the current working recipe and current input are saved to a desktop session file
-- input and output encoding/EOL settings are saved with the session
+- the current working recipe and the full input tab set are saved to a desktop session file
+- input and output encoding/EOL settings are saved per tab
 - the Auto Bake toggle is saved with the session
+- the active input and output tab selection are saved with the session
 - the last saved session is restored automatically on startup
-- default path is `~/.config/cyberchef/session.json`
-
-Current scope:
-
-- restores the current active workspace rather than the full multi-tab set
+- the `Settings` menu can reload or reset the session
+- the main window uses `~/.config/cyberchef/session.json`
+- additional native windows use `~/.config/cyberchef/windows/<label>/session.json`
 
 Primary implementation:
 
@@ -176,18 +175,81 @@ Primary implementation:
 Upstream touchpoints this customization depends on:
 
 - `window.app.getRecipeConfig`, `window.app.setRecipeConfig`
-- `window.app.setInput`
-- `window.app.manager.input.getInput`, `getChrEnc`, `getEOLSeq`
-- `window.app.manager.output.getChrEnc`, `getEOLSeq`
+- `window.app.manager.input.getInputNums`, `getInputObj`, `clearAllIoClick`, `addInput`, `changeTab`
+- `window.app.manager.output.outputs`, `changeTab`
 - `window.app.manager.controls.setAutoBake`
 - `statechange` continuing to represent meaningful workspace updates
 
 Review impact when upstream changes:
 
-- recipe or input setter semantics change
-- input/output encoding or EOL APIs change
+- recipe or tab restore semantics change
+- input/output worker APIs or tab numbering behavior change
 - the Auto Bake control flow changes
 - CyberChef changes how active workspace state is represented
+
+### Native macOS window tabs
+
+The Tauri shell can open additional desktop windows with the same macOS
+tabbing identifier so AppKit groups them as native window tabs, like Safari.
+
+Behavior:
+
+- the `Tabs` menu exposes `New Tab` with `CmdOrCtrl+T`
+- each new native tab is backed by a separate Tauri window with the shared
+  `cyberchef` tabbing identifier
+- open native tabs are recorded in `window-registry.json` and restored on launch
+- each native tab gets its own session and window-state files
+- shared favorites and options remain app-wide
+
+Primary implementation:
+
+- [src-tauri/tauri.conf.json](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/tauri.conf.json)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+### Desktop config directory override
+
+Desktop-owned state normally lives in `~/.config/cyberchef`, but the wrapper
+also supports redirecting that config tree to another folder under user control.
+
+Behavior:
+
+- the `Settings` menu exposes `Open Config Folder`, `Choose Config Folder...`, and `Use Default Config Folder`
+- an override can also be set with the `CYBERCHEF_CONFIG_DIR` environment variable
+- menu-driven overrides are recorded in `~/.config/cyberchef/config-dir.json`
+- changing the config folder immediately reloads favorites, settings, and session state from the new location
+
+Primary implementation:
+
+- [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+Review impact when upstream changes:
+
+- desktop config ownership expands to more files or settings
+- menu event wiring changes
+- platform-specific folder picker behavior changes
+
+### Desktop window state
+
+The Tauri shell also persists window state as desktop-owned config instead of
+relying on platform defaults only.
+
+Behavior:
+
+- window size, position, and maximized state are saved to `window.json`
+- the main window uses `~/.config/cyberchef/window.json`
+- additional native windows use `~/.config/cyberchef/windows/<label>/window.json`
+- the `Settings` menu exposes `Reset Window State`
+
+Primary implementation:
+
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+Review impact when upstream changes:
+
+- Tauri window APIs or event semantics change
+- macOS window tabbing behavior changes
+- the app gains additional multi-window flows that need separate persistence
 
 ## Update Review Checklist
 
@@ -200,8 +262,10 @@ When updating CyberChef, review at least these areas:
 5. Delete recipe removes the selected saved file from the folder.
 6. Favorites reload from the desktop config file and in-app edits write back to it.
 7. Options reload from the desktop config file and in-app edits write back to it.
-8. Session restore saves and restores the current active workspace correctly.
-9. Tauri app still builds and launches after the vendor update.
+8. Session restore saves and restores the full active tab set correctly.
+9. Config folder override and reset actions still work.
+10. Window state restores correctly.
+11. Tauri app still builds and launches after the vendor update.
 
 ## Adding New Customizations
 
