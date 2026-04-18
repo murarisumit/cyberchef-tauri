@@ -80,6 +80,115 @@ Review impact when upstream changes:
 - CyberChef stops exposing `window.app`
 - Tauri IPC/global bridge behavior changes
 
+### Desktop favorites config
+
+The upstream CyberChef favourites list is browser-oriented and stored in
+`localStorage`. In the desktop app, this wrapper mirrors the favourites UI to a
+real JSON config file so the list can be edited outside the app and kept under
+user control.
+
+Behavior:
+
+- favourites are loaded from a desktop config file on startup
+- edits made through CyberChef's built-in favourites UI save back to that file
+- returning focus to the app reloads the config file
+- a native `Settings` menu holds desktop configuration actions such as opening the favorites folder in Finder and triggering a reload
+- the config file is created automatically with the default CyberChef favourites
+- default path is `~/.config/cyberchef/favorite.json`
+
+Primary implementation:
+
+- [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+Upstream touchpoints this customization depends on:
+
+- `window.app.saveFavourites`, `window.app.loadFavourites`
+- `window.app.populateOperationsList`
+- `window.app.manager.recipe.initialiseOperationDragNDrop`
+- browser `localStorage` remaining available in the desktop webview
+
+Review impact when upstream changes:
+
+- favourites method names or call flow change
+- the favourites category no longer refreshes through `populateOperationsList`
+- CyberChef changes when or how it persists favourites locally
+- Tauri menu or event bridge behavior changes
+
+### Desktop options config
+
+The upstream CyberChef options dialog is browser-oriented and stored in
+`localStorage`. In the desktop app, the wrapper mirrors those settings to a
+real JSON config file so general app behavior is owned by the desktop wrapper
+instead of a webview profile.
+
+Behavior:
+
+- options are loaded from a desktop config file during app startup
+- changes made through CyberChef's built-in options dialog save back to that file
+- the `Settings` menu exposes `Open Config Folder` and `Reload Settings`
+- the options config file is created automatically with the current desktop defaults
+- default path is `~/.config/cyberchef/options.json`
+
+Primary implementation:
+
+- [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+Upstream touchpoints this customization depends on:
+
+- `window.app.options`
+- `window.app.manager.options.load`
+- `window.app.manager.options.updateOption`
+- `window.app.manager.options.resetOptionsClick`
+- browser `localStorage` remaining available in the desktop webview
+
+Review impact when upstream changes:
+
+- options waiter method names or event flow change
+- the options modal fields no longer map directly to `window.app.options`
+- CyberChef changes when or how it loads theme and other options
+- Tauri menu or event bridge behavior changes
+
+### Desktop session restore
+
+The upstream CyberChef app is largely browser-session oriented. In the desktop
+app, the wrapper stores the current working session in a real JSON file so the
+app can restore the last active workspace on launch.
+
+Behavior:
+
+- the current working recipe and current input are saved to a desktop session file
+- input and output encoding/EOL settings are saved with the session
+- the Auto Bake toggle is saved with the session
+- the last saved session is restored automatically on startup
+- default path is `~/.config/cyberchef/session.json`
+
+Current scope:
+
+- restores the current active workspace rather than the full multi-tab set
+
+Primary implementation:
+
+- [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
+Upstream touchpoints this customization depends on:
+
+- `window.app.getRecipeConfig`, `window.app.setRecipeConfig`
+- `window.app.setInput`
+- `window.app.manager.input.getInput`, `getChrEnc`, `getEOLSeq`
+- `window.app.manager.output.getChrEnc`, `getEOLSeq`
+- `window.app.manager.controls.setAutoBake`
+- `statechange` continuing to represent meaningful workspace updates
+
+Review impact when upstream changes:
+
+- recipe or input setter semantics change
+- input/output encoding or EOL APIs change
+- the Auto Bake control flow changes
+- CyberChef changes how active workspace state is represented
+
 ## Update Review Checklist
 
 When updating CyberChef, review at least these areas:
@@ -89,7 +198,10 @@ When updating CyberChef, review at least these areas:
 3. Save recipe opens the desktop-aware flow and stores files in the recipes folder.
 4. Load recipe lists saved files from the folder and loads them correctly.
 5. Delete recipe removes the selected saved file from the folder.
-6. Tauri app still builds and launches after the vendor update.
+6. Favorites reload from the desktop config file and in-app edits write back to it.
+7. Options reload from the desktop config file and in-app edits write back to it.
+8. Session restore saves and restores the current active workspace correctly.
+9. Tauri app still builds and launches after the vendor update.
 
 ## Adding New Customizations
 

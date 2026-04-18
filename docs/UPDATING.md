@@ -55,6 +55,9 @@ npm run vendor:add
    - Read
      [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)
    - Re-check save/load recipe behavior in the desktop app
+   - Re-check favorites config reload/save behavior in the desktop app
+   - Re-check options config reload/save behavior in the desktop app
+   - Re-check session restore/save behavior in the desktop app
    - Re-check wrapper-injected styling and any other desktop-only behavior
 
 5. Build the desktop app:
@@ -69,6 +72,9 @@ npm run vendor:add
    - wrapper assets are still injected into the staged dist
    - font override still looks intentional
    - desktop recipe save/load/delete still works
+   - desktop favorites config opens, reloads, and stays in sync with in-app edits
+   - desktop options config opens, reloads, and stays in sync with in-app edits
+   - desktop session restore brings back the last active workspace
 
 7. Commit the update:
 
@@ -190,7 +196,7 @@ v<app-version>-cyberchef.<cyberchef-version>
 
 - Desktop-only wrapper behavior regresses after a vendor update:
   Compare the updated upstream save/load modal markup, event wiring, and
-  compiled CSS against
+  favourites flow, options flow, session flow, and compiled CSS against
   [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)
   and adjust the wrapper-owned integration points rather than patching the
   vendored dist output by hand.
