@@ -88,11 +88,10 @@ npm run vendor:add
 
 ## Release Flow After Update
 
-If the update is also a release:
+Use this checklist when you are cutting a new app release and want Homebrew to
+pick it up.
 
-1. Cut the release with the helper script:
-
-   Auto-increment the patch version:
+1. Cut the release in this repository:
 
    ```bash
    npm run release:cut
@@ -104,27 +103,7 @@ If the update is also a release:
    npm run release:cut -- 0.2.0
    ```
 
-   This script will:
-
-   - bump or set the app version
-   - update `package.json`, `package-lock.json`, and `src-tauri/tauri.conf.json`
-   - run `npm run release:check`
-   - create the release commit
-   - create the annotated release tag
-
-2. If you want to inspect the next version without committing or tagging:
-
-   ```bash
-   npm run release:cut -- --dry-run
-   ```
-
-3. The helper script replaces the manual edits to:
-
-   - `package.json`
-   - `package-lock.json`
-   - `src-tauri/tauri.conf.json`
-
-4. Build the release DMG and sync the local Homebrew tap checkout:
+2. Build the DMG and update your local Homebrew tap checkout:
 
    ```bash
    HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:bundle
@@ -133,15 +112,37 @@ If the update is also a release:
    This writes `Casks/cyberchef-tauri.rb` in the tap checkout using the SHA-256
    from the freshly built local DMG.
 
-5. Push the branch and tag:
+3. Push the app repository release commit and tag:
 
    ```bash
    git push
    git push --tags
    ```
 
-The GitHub release workflow will validate the tag, build the macOS installer
-image, generate a matching Homebrew cask file, and publish a GitHub release.
+4. In the Homebrew tap repository, commit and push the updated cask:
+
+   ```bash
+   cd /absolute/path/to/homebrew-tap
+   git add Casks/cyberchef-tauri.rb
+   git commit -m "cask: update cyberchef-tauri"
+   git push
+   ```
+
+5. Upgrade from Homebrew:
+
+   ```bash
+   brew update
+   brew upgrade --cask murarisumit/tap/cyberchef-tauri
+   ```
+
+If you want to inspect the next app version without committing or tagging:
+
+```bash
+npm run release:cut -- --dry-run
+```
+
+The GitHub release workflow validates the tag, builds the macOS installer
+image, generates a matching Homebrew cask file, and publishes a GitHub release.
 
 ## Homebrew Tap
 
@@ -162,14 +163,14 @@ brew install --cask murarisumit/tap/cyberchef-tauri
 brew upgrade --cask murarisumit/tap/cyberchef-tauri
 ```
 
-If you want the repository to update your local tap checkout as part of the
-release flow, set `HOMEBREW_TAP_DIR` and run:
+To update the local tap checkout from this repository, set `HOMEBREW_TAP_DIR`
+and run:
 
 ```bash
 npm run release:bundle
 ```
 
-If you need to generate the cask manually from a built DMG:
+If you need to generate the cask manually from a built DMG instead:
 
 ```bash
 npm run release:homebrew -- \
@@ -182,6 +183,8 @@ Important:
 - Only point the cask at a GitHub release that already exists.
 - `npm run release:bundle` builds the DMG first, then `npm run release:tap`
   writes into the checkout named by `HOMEBREW_TAP_DIR` or `--tap-dir`.
+- After `npm run release:bundle`, commit and push the tap repo before expecting
+  `brew upgrade` to see the new version.
 - The cask version should match the published release tag without the leading
   `v`.
 - Do not update the tap to an unreleased local app version.
