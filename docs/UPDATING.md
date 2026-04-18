@@ -124,7 +124,16 @@ If the update is also a release:
    - `package-lock.json`
    - `src-tauri/tauri.conf.json`
 
-4. Push the branch and tag:
+4. Build the release DMG and sync the local Homebrew tap checkout:
+
+   ```bash
+   HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:bundle
+   ```
+
+   This writes `Casks/cyberchef-tauri.rb` in the tap checkout using the SHA-256
+   from the freshly built local DMG.
+
+5. Push the branch and tag:
 
    ```bash
    git push
@@ -132,13 +141,56 @@ If the update is also a release:
    ```
 
 The GitHub release workflow will validate the tag, build the macOS installer
-image, and publish a GitHub release.
+image, generate a matching Homebrew cask file, and publish a GitHub release.
+
+## Homebrew Tap
+
+The Homebrew distribution for this app should be a cask, not a formula, because
+the release artifact is a macOS `.dmg` containing `CyberChef.app`.
+
+The canonical cask token is:
+
+```bash
+cyberchef-tauri
+```
+
+The tap should expose install and upgrade commands as:
+
+```bash
+brew tap murarisumit/tap
+brew install --cask murarisumit/tap/cyberchef-tauri
+brew upgrade --cask murarisumit/tap/cyberchef-tauri
+```
+
+If you want the repository to update your local tap checkout as part of the
+release flow, set `HOMEBREW_TAP_DIR` and run:
+
+```bash
+npm run release:bundle
+```
+
+If you need to generate the cask manually from a built DMG:
+
+```bash
+npm run release:homebrew -- \
+  --artifact ./src-tauri/target/release/bundle/dmg/<tauri-generated>.dmg \
+  --output /absolute/path/to/homebrew-tap/Casks/cyberchef-tauri.rb
+```
+
+Important:
+
+- Only point the cask at a GitHub release that already exists.
+- `npm run release:bundle` builds the DMG first, then `npm run release:tap`
+  writes into the checkout named by `HOMEBREW_TAP_DIR` or `--tap-dir`.
+- The cask version should match the published release tag without the leading
+  `v`.
+- Do not update the tap to an unreleased local app version.
 
 ## Downloadable GitHub Artifacts
 
 - `.github/workflows/release.yml` uploads a downloadable release artifact on the
-  workflow run and also publishes the same DMG as a GitHub release asset for
-  tag-based releases.
+  workflow run, uploads a generated Homebrew cask, and also publishes the same
+  DMG plus cask file as GitHub release assets for tag-based releases.
 - `.github/workflows/cyberchef-upstream-build.yml` runs daily, checks the
   current upstream CyberChef HEAD, and only builds a fresh DMG artifact when
   the vendored commit is behind.

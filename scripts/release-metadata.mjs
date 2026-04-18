@@ -1,24 +1,6 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import process from "node:process";
-import {projectRoot, vendorMetadataPath, vendoredCyberChefDir} from "./lib.mjs";
-
-async function readJsonFile(filePath) {
-    return JSON.parse(await fs.readFile(filePath, "utf8"));
-}
-
-function buildReleaseMetadata({appVersion, cyberChefVersion, vendorMetadata}) {
-    const releaseTag = `v${appVersion}-cyberchef.${cyberChefVersion}`;
-
-    return {
-        appVersion,
-        cyberChefVersion,
-        releaseTag,
-        releaseName: `CyberChef Tauri ${releaseTag}`,
-        vendorCommit: vendorMetadata.commit || "",
-        vendorRemote: vendorMetadata.remote || "",
-    };
-}
+import fs from "node:fs/promises";
+import {readReleaseMetadata} from "./release-info.mjs";
 
 function printGithubOutput(metadata) {
     const githubOutput = process.env.GITHUB_OUTPUT;
@@ -32,6 +14,15 @@ function printGithubOutput(metadata) {
         `cyberchef_version=${metadata.cyberChefVersion}`,
         `release_tag=${metadata.releaseTag}`,
         `release_name=${metadata.releaseName}`,
+        `release_asset_name=${metadata.releaseAssetName}`,
+        `release_download_url=${metadata.releaseDownloadUrl}`,
+        `source_repository=${metadata.sourceRepository}`,
+        `source_repository_url=${metadata.sourceRepositoryUrl}`,
+        `homebrew_version=${metadata.homebrewVersion}`,
+        `homebrew_cask_token=${metadata.homebrewCaskToken}`,
+        `homebrew_cask_path=${metadata.homebrewCaskPath}`,
+        `homebrew_tap_name=${metadata.homebrewTapName}`,
+        `homebrew_tap_repo=${metadata.homebrewTapRepo}`,
         `vendor_commit=${metadata.vendorCommit}`,
         `vendor_remote=${metadata.vendorRemote}`,
     ];
@@ -40,26 +31,7 @@ function printGithubOutput(metadata) {
 }
 
 try {
-    const packageJson = await readJsonFile(path.join(projectRoot, "package.json"));
-    const tauriConfig = await readJsonFile(path.join(projectRoot, "src-tauri", "tauri.conf.json"));
-    const cyberChefPackage = await readJsonFile(path.join(vendoredCyberChefDir, "package.json"));
-    const vendorMetadata = await readJsonFile(vendorMetadataPath);
-
-    const appVersion = packageJson.version;
-    const tauriVersion = tauriConfig.package.version;
-    const cyberChefVersion = cyberChefPackage.version;
-
-    if (appVersion !== tauriVersion) {
-        throw new Error(
-            `App version mismatch: package.json=${appVersion}, tauri.conf.json=${tauriVersion}`
-        );
-    }
-
-    const metadata = buildReleaseMetadata({
-        appVersion,
-        cyberChefVersion,
-        vendorMetadata,
-    });
+    const metadata = await readReleaseMetadata();
 
     if (process.argv.includes("--github-output")) {
         await printGithubOutput(metadata);

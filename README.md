@@ -55,6 +55,20 @@ Build the desktop app:
 npm run tauri build
 ```
 
+Install or upgrade the released macOS app from Homebrew:
+
+```bash
+brew tap murarisumit/tap
+brew install --cask murarisumit/tap/cyberchef-tauri
+brew upgrade --cask murarisumit/tap/cyberchef-tauri
+```
+
+Sync the local Homebrew tap cask after a local release build:
+
+```bash
+HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:bundle
+```
+
 Regenerate wrapper icons from CyberChef assets:
 
 ```bash
