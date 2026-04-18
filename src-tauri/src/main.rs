@@ -13,7 +13,7 @@ use std::{
 };
 use tauri::{
     CustomMenuItem, LogicalPosition, LogicalSize, Manager, Menu, Position, Size, Submenu,
-    WindowEvent,
+    WindowEvent, WindowUrl,
 };
 #[cfg(target_os = "macos")]
 use {
@@ -41,6 +41,12 @@ struct ConfigDirOverride {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct RecipeDirOverride {
+    recipe_dir: String,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WindowConfig {
     width: u32,
     height: u32,
@@ -56,9 +62,35 @@ struct WindowRegistry {
     next_window_index: u32,
 }
 
-#[derive(Default)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopSettingsSnapshot {
+    target_window_label: String,
+    config_dir: String,
+    config_dir_source: String,
+    config_override_path: String,
+    recipe_storage_dir: String,
+    recipe_storage_dir_source: String,
+    recipe_override_path: String,
+    default_recipe_storage_dir: String,
+    favorites_config_path: String,
+    options_config_path: String,
+    session_config_path: String,
+    window_config_path: String,
+}
+
 struct AppState {
     is_exiting: Mutex<bool>,
+    settings_target_label: Mutex<String>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            is_exiting: Mutex::new(false),
+            settings_target_label: Mutex::new(MAIN_WINDOW_LABEL.to_string()),
+        }
+    }
 }
 
 const DEFAULT_FAVORITES: &[&str] = &[
@@ -77,7 +109,12 @@ const DEFAULT_FAVORITES: &[&str] = &[
 
 const DEFAULT_WINDOW_WIDTH: u32 = 1440;
 const DEFAULT_WINDOW_HEIGHT: u32 = 900;
+const SETTINGS_WINDOW_WIDTH: u32 = 760;
+const SETTINGS_WINDOW_HEIGHT: u32 = 620;
+const SETTINGS_WINDOW_MIN_WIDTH: u32 = 640;
+const SETTINGS_WINDOW_MIN_HEIGHT: u32 = 520;
 const MAIN_WINDOW_LABEL: &str = "main";
+const SETTINGS_WINDOW_LABEL: &str = "settings";
 const WINDOW_TABBING_IDENTIFIER: &str = "cyberchef";
 
 fn home_dir() -> Result<PathBuf, String> {
@@ -119,6 +156,32 @@ fn expand_home_path(path: PathBuf) -> Result<PathBuf, String> {
 
 fn config_override_path() -> Result<PathBuf, String> {
     Ok(default_config_dir()?.join("config-dir.json"))
+}
+
+fn recipe_override_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(config_dir(app)?.join("recipe-dir.json"))
+}
+
+fn is_workspace_window_label(label: &str) -> bool {
+    label == MAIN_WINDOW_LABEL || label.starts_with("window-")
+}
+
+fn target_workspace_label(label: &str) -> &str {
+    if is_workspace_window_label(label) {
+        label
+    } else {
+        MAIN_WINDOW_LABEL
+    }
+}
+
+fn config_dir_source() -> &'static str {
+    if env::var_os("CYBERCHEF_CONFIG_DIR").is_some() {
+        "environment"
+    } else if read_config_dir_override().ok().flatten().is_some() {
+        "override"
+    } else {
+        "default"
+    }
 }
 
 fn read_config_dir_override() -> Result<Option<PathBuf>, String> {
@@ -173,6 +236,66 @@ fn clear_config_dir_override() -> Result<(), String> {
         fs::remove_file(&override_path).map_err(|error| {
             format!(
                 "Unable to remove config override file {}: {error}",
+                override_path.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+fn read_recipe_dir_override(app: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    let override_path = recipe_override_path(app)?;
+
+    if !override_path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(&override_path).map_err(|error| {
+        format!(
+            "Unable to read recipe override file {}: {error}",
+            override_path.display()
+        )
+    })?;
+    let parsed: RecipeDirOverride = serde_json::from_str(&contents).map_err(|error| {
+        format!(
+            "Unable to parse recipe override file {}: {error}. Expected JSON like {{\"recipeDir\": \"/path/to/recipes\"}}",
+            override_path.display()
+        )
+    })?;
+
+    Ok(Some(expand_home_path(PathBuf::from(parsed.recipe_dir))?))
+}
+
+fn write_recipe_dir_override(app: &tauri::AppHandle, path: &Path) -> Result<PathBuf, String> {
+    let override_path = recipe_override_path(app)?;
+    let payload = RecipeDirOverride {
+        recipe_dir: path.display().to_string(),
+    };
+    let contents = serde_json::to_string_pretty(&payload).map_err(|error| {
+        format!(
+            "Unable to serialize recipe override file {}: {error}",
+            override_path.display()
+        )
+    })?;
+
+    fs::write(&override_path, format!("{contents}\n")).map_err(|error| {
+        format!(
+            "Unable to write recipe override file {}: {error}",
+            override_path.display()
+        )
+    })?;
+
+    Ok(override_path)
+}
+
+fn clear_recipe_dir_override(app: &tauri::AppHandle) -> Result<(), String> {
+    let override_path = recipe_override_path(app)?;
+
+    if override_path.exists() {
+        fs::remove_file(&override_path).map_err(|error| {
+            format!(
+                "Unable to remove recipe override file {}: {error}",
                 override_path.display()
             )
         })?;
@@ -266,21 +389,57 @@ fn window_config_path(app: &tauri::AppHandle, label: &str) -> Result<PathBuf, St
     Ok(window_instance_dir(app, label)?.join("window.json"))
 }
 
-fn recipes_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path_resolver()
+fn legacy_recipe_storage_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path_resolver()
         .app_data_dir()
-        .ok_or_else(|| "Unable to resolve the application data directory.".to_string())?
-        .join("recipes");
+        .ok_or_else(|| "Unable to resolve the application data directory.".to_string())
+        .map(|path| path.join("recipes"))
+}
 
-    fs::create_dir_all(&dir).map_err(|error| {
-        format!(
-            "Unable to create recipe directory at {}: {error}",
-            dir.display()
-        )
-    })?;
+fn default_recipe_storage_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = default_config_dir()?.join("receipes");
 
-    Ok(dir)
+    if !dir.exists() {
+        let legacy_dir = legacy_recipe_storage_dir(app)?;
+
+        if legacy_dir.exists() {
+            fs::create_dir_all(dir.parent().ok_or_else(|| {
+                "Unable to resolve the parent directory for the recipe directory.".to_string()
+            })?)
+            .map_err(|error| {
+                format!(
+                    "Unable to create recipe directory parent {}: {error}",
+                    dir.display()
+                )
+            })?;
+
+            if let Err(error) = fs::rename(&legacy_dir, &dir) {
+                return Err(format!(
+                    "Unable to move legacy recipe directory from {} to {}: {error}",
+                    legacy_dir.display(),
+                    dir.display()
+                ));
+            }
+        }
+    }
+
+    ensure_directory(&dir, "recipe directory")
+}
+
+fn recipes_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(dir) = read_recipe_dir_override(app)? {
+        return ensure_directory(&dir, "recipe directory");
+    }
+
+    default_recipe_storage_dir(app)
+}
+
+fn recipe_dir_source(app: &tauri::AppHandle) -> &'static str {
+    if read_recipe_dir_override(app).ok().flatten().is_some() {
+        "override"
+    } else {
+        "default"
+    }
 }
 
 fn sanitise_recipe_stem(recipe_name: &str) -> String {
@@ -384,6 +543,20 @@ fn default_window_config() -> WindowConfig {
     }
 }
 
+fn default_window_config_for(label: &str) -> WindowConfig {
+    if label == SETTINGS_WINDOW_LABEL {
+        return WindowConfig {
+            width: SETTINGS_WINDOW_WIDTH,
+            height: SETTINGS_WINDOW_HEIGHT,
+            x: None,
+            y: None,
+            maximized: false,
+        };
+    }
+
+    default_window_config()
+}
+
 fn default_window_registry() -> WindowRegistry {
     WindowRegistry {
         open_windows: vec![MAIN_WINDOW_LABEL.to_string()],
@@ -465,7 +638,7 @@ fn window_label_index(label: &str) -> Option<u32> {
 fn ordered_window_labels(labels: Vec<String>) -> Vec<String> {
     let mut others = labels
         .into_iter()
-        .filter(|label| label != MAIN_WINDOW_LABEL)
+        .filter(|label| is_workspace_window_label(label) && label != MAIN_WINDOW_LABEL)
         .collect::<Vec<_>>();
 
     others.sort();
@@ -542,7 +715,7 @@ fn ensure_window_config(app: &tauri::AppHandle, label: &str) -> Result<PathBuf, 
     let path = window_config_path(app, label)?;
 
     if !path.exists() {
-        write_window_config(&path, &default_window_config())?;
+        write_window_config(&path, &default_window_config_for(label))?;
     }
 
     Ok(path)
@@ -651,6 +824,20 @@ fn read_window_config(app: &tauri::AppHandle, label: &str) -> Result<WindowConfi
         )
     })?;
 
+    if label == SETTINGS_WINDOW_LABEL {
+        return Ok(WindowConfig {
+            width: parsed
+                .width
+                .clamp(SETTINGS_WINDOW_MIN_WIDTH, SETTINGS_WINDOW_WIDTH),
+            height: parsed
+                .height
+                .clamp(SETTINGS_WINDOW_MIN_HEIGHT, SETTINGS_WINDOW_HEIGHT),
+            x: parsed.x,
+            y: parsed.y,
+            maximized: false,
+        });
+    }
+
     Ok(parsed)
 }
 
@@ -758,7 +945,7 @@ fn save_window_state(window: &tauri::Window) -> Result<String, String> {
 
 fn reset_window_state(window: &tauri::Window) -> Result<String, String> {
     let path = ensure_window_config(&window.app_handle(), window.label())?;
-    let window_config = default_window_config();
+    let window_config = default_window_config_for(window.label());
     write_window_config(&path, &window_config)?;
     apply_window_config(window, &window_config)?;
     Ok(path.display().to_string())
@@ -782,10 +969,97 @@ fn reset_session_file(window: &tauri::Window) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
+fn set_settings_target_label(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut target = state
+        .settings_target_label
+        .lock()
+        .map_err(|_| "Unable to update the settings target window.".to_string())?;
+    *target = target_workspace_label(label).to_string();
+    Ok(())
+}
+
+fn settings_target_label_for(window: &tauri::Window) -> Result<String, String> {
+    if window.label() == SETTINGS_WINDOW_LABEL {
+        return window
+            .state::<AppState>()
+            .settings_target_label
+            .lock()
+            .map(|value| value.clone())
+            .map_err(|_| "Unable to read the settings target window.".to_string());
+    }
+
+    Ok(target_workspace_label(window.label()).to_string())
+}
+
+fn desktop_settings_snapshot(
+    app: &tauri::AppHandle,
+    target_label: &str,
+) -> Result<DesktopSettingsSnapshot, String> {
+    let target_window_label = target_workspace_label(target_label).to_string();
+    let config_dir = config_dir(app)?;
+    let recipe_storage_dir = recipes_dir(app)?;
+    let default_recipe_storage_dir = default_recipe_storage_dir(app)?;
+    let favorites_config_path = ensure_favorites_config(app)?;
+    let options_config_path = ensure_options_config(app)?;
+    let session_config_path = ensure_session_config(app, &target_window_label)?;
+    let window_config_path = ensure_window_config(app, &target_window_label)?;
+
+    Ok(DesktopSettingsSnapshot {
+        target_window_label,
+        config_dir: config_dir.display().to_string(),
+        config_dir_source: config_dir_source().to_string(),
+        config_override_path: config_override_path()?.display().to_string(),
+        recipe_storage_dir: recipe_storage_dir.display().to_string(),
+        recipe_storage_dir_source: recipe_dir_source(app).to_string(),
+        recipe_override_path: recipe_override_path(app)?.display().to_string(),
+        default_recipe_storage_dir: default_recipe_storage_dir.display().to_string(),
+        favorites_config_path: favorites_config_path.display().to_string(),
+        options_config_path: options_config_path.display().to_string(),
+        session_config_path: session_config_path.display().to_string(),
+        window_config_path: window_config_path.display().to_string(),
+    })
+}
+
 fn emit_config_dir_changed(app: &tauri::AppHandle) -> Result<(), String> {
     let dir = config_dir(app)?;
     app.emit_all("desktop://config-dir-changed", dir.display().to_string())
         .map_err(|error| format!("Unable to emit config directory change event: {error}"))
+}
+
+fn emit_recipe_storage_dir_changed(app: &tauri::AppHandle) -> Result<(), String> {
+    let dir = recipes_dir(app)?;
+    app.emit_all(
+        "desktop://recipe-storage-dir-changed",
+        dir.display().to_string(),
+    )
+    .map_err(|error| format!("Unable to emit recipe storage change event: {error}"))
+}
+
+fn emit_settings_context_changed(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_window(SETTINGS_WINDOW_LABEL) {
+        window
+            .emit("desktop://settings-context-changed", ())
+            .map_err(|error| format!("Unable to emit settings context change event: {error}"))?;
+    }
+
+    Ok(())
+}
+
+fn emit_reload_settings(app: &tauri::AppHandle) -> Result<(), String> {
+    app.emit_all("desktop://reload-settings", ())
+        .map_err(|error| format!("Unable to emit settings reload event: {error}"))
+}
+
+fn emit_reload_favorites(app: &tauri::AppHandle) -> Result<(), String> {
+    app.emit_all("desktop://reload-favorites", ())
+        .map_err(|error| format!("Unable to emit favorites reload event: {error}"))
+}
+
+fn emit_reload_session(window: &tauri::Window) -> Result<(), String> {
+    window
+        .emit("desktop://reload-session", ())
+        .map_err(|error| format!("Unable to emit session reload event: {error}"))
 }
 
 fn save_window_registry(app: &tauri::AppHandle, registry: &WindowRegistry) -> Result<(), String> {
@@ -796,7 +1070,12 @@ fn save_window_registry(app: &tauri::AppHandle, registry: &WindowRegistry) -> Re
 fn sync_window_registry_with_open_windows(
     app: &tauri::AppHandle,
 ) -> Result<WindowRegistry, String> {
-    let mut labels = app.windows().keys().cloned().collect::<Vec<_>>();
+    let mut labels = app
+        .windows()
+        .keys()
+        .filter(|label| is_workspace_window_label(label))
+        .cloned()
+        .collect::<Vec<_>>();
 
     if !labels.iter().any(|label| label == MAIN_WINDOW_LABEL) {
         labels.push(MAIN_WINDOW_LABEL.to_string());
@@ -810,6 +1089,10 @@ fn sync_window_registry_with_open_windows(
 }
 
 fn remove_window_from_registry(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    if !is_workspace_window_label(label) {
+        return Ok(());
+    }
+
     let mut registry = read_window_registry(app).unwrap_or_else(|_| default_window_registry());
     registry.open_windows.retain(|candidate| candidate != label);
     registry = normalise_window_registry(registry);
@@ -874,6 +1157,46 @@ fn create_native_window(app: &tauri::AppHandle, label: &str) -> Result<tauri::Wi
     sync_window_registry_with_open_windows(app)?;
 
     Ok(window)
+}
+
+fn settings_window_url() -> Result<WindowUrl, String> {
+    Ok(WindowUrl::App("settings.html".into()))
+}
+
+fn open_settings_window_for(source_window: &tauri::Window) -> Result<(), String> {
+    let app = source_window.app_handle();
+    set_settings_target_label(&app, source_window.label())?;
+
+    let window = if let Some(existing_window) = app.get_window(SETTINGS_WINDOW_LABEL) {
+        existing_window
+    } else {
+        let window = tauri::WindowBuilder::new(&app, SETTINGS_WINDOW_LABEL, settings_window_url()?)
+            .title("CyberChef Settings")
+            .inner_size(
+                f64::from(SETTINGS_WINDOW_WIDTH),
+                f64::from(SETTINGS_WINDOW_HEIGHT),
+            )
+            .min_inner_size(
+                f64::from(SETTINGS_WINDOW_MIN_WIDTH),
+                f64::from(SETTINGS_WINDOW_MIN_HEIGHT),
+            )
+            .resizable(true)
+            .build()
+            .map_err(|error| format!("Unable to create settings window: {error}"))?;
+
+        ensure_window_config(&app, SETTINGS_WINDOW_LABEL)?;
+        apply_saved_window_state(&window)?;
+        window
+    };
+
+    window
+        .show()
+        .map_err(|error| format!("Unable to show the settings window: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("Unable to focus the settings window: {error}"))?;
+    emit_settings_context_changed(&app)?;
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -956,33 +1279,14 @@ fn restore_native_windows(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn choose_config_dir(window: tauri::Window) {
-    let current_dir = match config_dir(&window.app_handle()) {
-        Ok(dir) => dir,
-        Err(error) => {
-            eprintln!("{error}");
-            return;
-        }
-    };
-
-    match pick_config_dir(&current_dir)
-        .and_then(|selected_dir| ensure_directory(&selected_dir, "config directory"))
-        .and_then(|dir| write_config_dir_override(&dir).map(|_| dir))
-        .and_then(|_| save_window_state(&window).map(|_| ()))
-        .and_then(|_| emit_config_dir_changed(&window.app_handle()))
-    {
-        Ok(()) => {}
-        Err(error) => eprintln!("{error}"),
-    }
-}
-
 #[cfg(target_os = "macos")]
-fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
+fn pick_directory(current_dir: &Path, prompt: &str) -> Result<PathBuf, String> {
     let escaped_dir = current_dir.display().to_string().replace('"', "\\\"");
+    let escaped_prompt = prompt.replace('"', "\\\"");
     let output = Command::new("osascript")
         .arg("-e")
         .arg(format!(
-            "POSIX path of (choose folder with prompt \"Choose CyberChef config folder\" default location POSIX file \"{escaped_dir}\")"
+            "POSIX path of (choose folder with prompt \"{escaped_prompt}\" default location POSIX file \"{escaped_dir}\")"
         ))
         .output()
         .map_err(|error| format!("Unable to open the macOS folder chooser: {error}"))?;
@@ -1008,7 +1312,7 @@ fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "linux")]
-fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
+fn pick_directory(current_dir: &Path, _prompt: &str) -> Result<PathBuf, String> {
     let output = Command::new("zenity")
         .arg("--file-selection")
         .arg("--directory")
@@ -1034,7 +1338,7 @@ fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
+fn pick_directory(current_dir: &Path, _prompt: &str) -> Result<PathBuf, String> {
     let current_dir = current_dir.display().to_string().replace('\'', "''");
     let script = format!(
         "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); \
@@ -1067,9 +1371,23 @@ fn pick_config_dir(current_dir: &Path) -> Result<PathBuf, String> {
     ))
 }
 
+fn target_workspace_window(window: &tauri::Window) -> Result<tauri::Window, String> {
+    let target_label = settings_target_label_for(window)?;
+    window
+        .app_handle()
+        .get_window(&target_label)
+        .ok_or_else(|| format!("Unable to find workspace window {target_label}."))
+}
+
 #[tauri::command]
 fn recipe_storage_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(recipes_dir(&app)?.display().to_string())
+}
+
+#[tauri::command]
+fn load_desktop_settings(window: tauri::Window) -> Result<DesktopSettingsSnapshot, String> {
+    let target_label = settings_target_label_for(&window)?;
+    desktop_settings_snapshot(&window.app_handle(), &target_label)
 }
 
 #[tauri::command]
@@ -1088,6 +1406,30 @@ fn set_config_dir_override(_app: tauri::AppHandle, path: String) -> Result<Strin
 fn reset_config_dir_override(app: tauri::AppHandle) -> Result<String, String> {
     clear_config_dir_override()?;
     Ok(config_dir(&app)?.display().to_string())
+}
+
+#[tauri::command]
+fn choose_config_dir_from_settings(window: tauri::Window) -> Result<String, String> {
+    let current_dir = config_dir(&window.app_handle())?;
+    let selected_dir = pick_directory(&current_dir, "Choose CyberChef config folder")?;
+    let dir = ensure_directory(&selected_dir, "config directory")?;
+
+    write_config_dir_override(&dir)?;
+    emit_config_dir_changed(&window.app_handle())?;
+    emit_recipe_storage_dir_changed(&window.app_handle())?;
+    emit_settings_context_changed(&window.app_handle())?;
+
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn use_default_config_dir_from_settings(window: tauri::Window) -> Result<String, String> {
+    clear_config_dir_override()?;
+    let dir = config_dir(&window.app_handle())?;
+    emit_config_dir_changed(&window.app_handle())?;
+    emit_recipe_storage_dir_changed(&window.app_handle())?;
+    emit_settings_context_changed(&window.app_handle())?;
+    Ok(dir.display().to_string())
 }
 
 #[tauri::command]
@@ -1166,6 +1508,28 @@ fn new_native_tab(window: tauri::Window) -> Result<String, String> {
 fn open_config_dir(app: tauri::AppHandle) -> Result<String, String> {
     let dir = config_dir(&app)?;
     open_path_in_system(&dir)?;
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn choose_recipe_storage_dir(window: tauri::Window) -> Result<String, String> {
+    let current_dir = recipes_dir(&window.app_handle())?;
+    let selected_dir = pick_directory(&current_dir, "Choose CyberChef recipe folder")?;
+    let dir = ensure_directory(&selected_dir, "recipe directory")?;
+
+    write_recipe_dir_override(&window.app_handle(), &dir)?;
+    emit_recipe_storage_dir_changed(&window.app_handle())?;
+    emit_settings_context_changed(&window.app_handle())?;
+
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn use_default_recipe_storage_dir(window: tauri::Window) -> Result<String, String> {
+    clear_recipe_dir_override(&window.app_handle())?;
+    let dir = recipes_dir(&window.app_handle())?;
+    emit_recipe_storage_dir_changed(&window.app_handle())?;
+    emit_settings_context_changed(&window.app_handle())?;
     Ok(dir.display().to_string())
 }
 
@@ -1251,37 +1615,63 @@ fn open_recipe_storage_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(dir.display().to_string())
 }
 
+#[tauri::command]
+fn open_settings(window: tauri::Window) -> Result<(), String> {
+    open_settings_window_for(&window)
+}
+
+#[tauri::command]
+fn reload_settings_now(app: tauri::AppHandle) -> Result<(), String> {
+    emit_reload_settings(&app)
+}
+
+#[tauri::command]
+fn reload_favorites_now(app: tauri::AppHandle) -> Result<(), String> {
+    emit_reload_favorites(&app)
+}
+
+#[tauri::command]
+fn reload_session_now(window: tauri::Window) -> Result<(), String> {
+    let target_window = target_workspace_window(&window)?;
+    emit_reload_session(&target_window)
+}
+
+#[tauri::command]
+fn reset_settings_now(app: tauri::AppHandle) -> Result<String, String> {
+    let path = reset_options_file(&app)?;
+    emit_reload_settings(&app)?;
+    Ok(path)
+}
+
+#[tauri::command]
+fn reset_favorites_now(app: tauri::AppHandle) -> Result<String, String> {
+    let path = reset_favorites_file(&app)?;
+    emit_reload_favorites(&app)?;
+    Ok(path)
+}
+
+#[tauri::command]
+fn reset_session_now(window: tauri::Window) -> Result<String, String> {
+    let target_window = target_workspace_window(&window)?;
+    let path = reset_session_file(&target_window)?;
+    emit_reload_session(&target_window)?;
+    Ok(path)
+}
+
+#[tauri::command]
+fn reset_window_state_now(window: tauri::Window) -> Result<String, String> {
+    let target_window = target_workspace_window(&window)?;
+    let path = reset_window_state(&target_window)?;
+    emit_settings_context_changed(&window.app_handle())?;
+    Ok(path)
+}
+
 fn build_app_menu(app_name: &str) -> Menu {
     let settings_menu = Submenu::new(
         "Settings",
-        Menu::new()
-            .add_item(CustomMenuItem::new("open_config_dir", "Open Config Folder"))
-            .add_item(CustomMenuItem::new(
-                "choose_config_dir",
-                "Choose Config Folder...",
-            ))
-            .add_item(CustomMenuItem::new(
-                "use_default_config_dir",
-                "Use Default Config Folder",
-            ))
-            .add_native_item(tauri::MenuItem::Separator)
-            .add_item(CustomMenuItem::new("reload_settings", "Reload Settings"))
-            .add_item(CustomMenuItem::new(
-                "reload_favorites_config",
-                "Reload Favorites",
-            ))
-            .add_item(CustomMenuItem::new(
-                "reload_session_config",
-                "Reload Session",
-            ))
-            .add_native_item(tauri::MenuItem::Separator)
-            .add_item(CustomMenuItem::new("reset_settings", "Reset Settings"))
-            .add_item(CustomMenuItem::new("reset_favorites", "Reset Favorites"))
-            .add_item(CustomMenuItem::new("reset_session", "Reset Session"))
-            .add_item(CustomMenuItem::new(
-                "reset_window_state",
-                "Reset Window State",
-            )),
+        Menu::new().add_item(
+            CustomMenuItem::new("open_settings", "Open Settings").accelerator("CmdOrCtrl+,"),
+        ),
     );
 
     let menu = Menu::os_default(app_name);
@@ -1346,89 +1736,8 @@ fn main() {
                     eprintln!("{error}");
                 }
             }
-            "open_config_dir" => {
-                if let Err(error) = open_config_dir(event.window().app_handle()) {
-                    eprintln!("{error}");
-                }
-            }
-            "choose_config_dir" => {
-                choose_config_dir(event.window().clone());
-            }
-            "use_default_config_dir" => {
-                if let Err(error) = clear_config_dir_override()
-                    .and_then(|_| save_window_state(event.window()).map(|_| ()))
-                    .and_then(|_| emit_config_dir_changed(&event.window().app_handle()))
-                {
-                    eprintln!("{error}");
-                }
-            }
-            "reload_settings" => {
-                if let Err(error) = event
-                    .window()
-                    .app_handle()
-                    .emit_all("desktop://reload-settings", ())
-                {
-                    eprintln!("Unable to emit settings reload event: {error}");
-                }
-            }
-            "reload_favorites_config" => {
-                if let Err(error) = event
-                    .window()
-                    .app_handle()
-                    .emit_all("desktop://reload-favorites", ())
-                {
-                    eprintln!("Unable to emit favorites reload event: {error}");
-                }
-            }
-            "reload_session_config" => {
-                if let Err(error) = event.window().emit("desktop://reload-session", ()) {
-                    eprintln!("Unable to emit session reload event: {error}");
-                }
-            }
-            "reset_settings" => {
-                if let Err(error) =
-                    reset_options_file(&event.window().app_handle()).and_then(|_| {
-                        event
-                            .window()
-                            .app_handle()
-                            .emit_all("desktop://reload-settings", ())
-                            .map_err(|emit_error| {
-                                format!("Unable to emit settings reload event: {emit_error}")
-                            })
-                    })
-                {
-                    eprintln!("{error}");
-                }
-            }
-            "reset_favorites" => {
-                if let Err(error) =
-                    reset_favorites_file(&event.window().app_handle()).and_then(|_| {
-                        event
-                            .window()
-                            .app_handle()
-                            .emit_all("desktop://reload-favorites", ())
-                            .map_err(|emit_error| {
-                                format!("Unable to emit favorites reload event: {emit_error}")
-                            })
-                    })
-                {
-                    eprintln!("{error}");
-                }
-            }
-            "reset_session" => {
-                if let Err(error) = reset_session_file(event.window()).and_then(|_| {
-                    event
-                        .window()
-                        .emit("desktop://reload-session", ())
-                        .map_err(|emit_error| {
-                            format!("Unable to emit session reload event: {emit_error}")
-                        })
-                }) {
-                    eprintln!("{error}");
-                }
-            }
-            "reset_window_state" => {
-                if let Err(error) = reset_window_state(event.window()) {
+            "open_settings" => {
+                if let Err(error) = open_settings_window_for(event.window()) {
                     eprintln!("{error}");
                 }
             }
@@ -1436,9 +1745,12 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             recipe_storage_dir,
+            load_desktop_settings,
             current_config_dir,
+            choose_config_dir_from_settings,
             set_config_dir_override,
             reset_config_dir_override,
+            use_default_config_dir_from_settings,
             load_favorites_config,
             save_favorites_config,
             reset_favorites_config,
@@ -1449,10 +1761,20 @@ fn main() {
             save_session_config,
             reset_session_config,
             open_config_dir,
+            choose_recipe_storage_dir,
+            use_default_recipe_storage_dir,
             save_recipe_file,
             list_recipe_files,
             delete_recipe_file,
             open_recipe_storage_dir,
+            open_settings,
+            reload_settings_now,
+            reload_favorites_now,
+            reload_session_now,
+            reset_settings_now,
+            reset_favorites_now,
+            reset_session_now,
+            reset_window_state_now,
             new_native_tab
         ])
         .build(context)

@@ -21,6 +21,9 @@ Injected assets:
 
 - [wrapper-assets/tauri-font-override.css](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-font-override.css)
 - [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [wrapper-assets/settings.html](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/settings.html)
+- [wrapper-assets/tauri-settings.css](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-settings.css)
+- [wrapper-assets/tauri-settings.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-settings.js)
 
 Review impact when upstream changes:
 
@@ -55,14 +58,18 @@ real recipes folder backed by Tauri commands.
 Behavior:
 
 - Save button becomes `Save to Folder`
-- save modal gets an `Open Folder` button
-- saved recipes are stored in the app data directory under `recipes/`
+- save modal gets `Open Folder` and `Change Folder` buttons
+- saved recipes are stored in the chosen recipe folder
+- default recipe storage remains the app data directory under `recipes/`
+- the settings window can choose or reset the recipe folder
 - load dropdown is populated from that folder
 - delete removes the saved recipe file from that folder
 
 Primary implementation:
 
 - [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [wrapper-assets/settings.html](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/settings.html)
+- [wrapper-assets/tauri-settings.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-settings.js)
 - [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
 - [src-tauri/tauri.conf.json](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/tauri.conf.json)
 
@@ -80,6 +87,27 @@ Review impact when upstream changes:
 - CyberChef stops exposing `window.app`
 - Tauri IPC/global bridge behavior changes
 
+### Desktop settings window
+
+The wrapper exposes a dedicated Tauri settings window so desktop-owned settings
+and reset actions no longer need to live as a long menu list.
+
+Behavior:
+
+- the app menu now exposes `Open Settings`
+- the settings window shows the current config folder, recipe folder, and the
+  desktop-owned file paths for favorites, options, session, and window state
+- reload and reset actions for settings, favorites, session, and window state
+  are triggered from that window
+- session and window actions target the workspace window that opened settings
+
+Primary implementation:
+
+- [wrapper-assets/settings.html](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/settings.html)
+- [wrapper-assets/tauri-settings.css](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-settings.css)
+- [wrapper-assets/tauri-settings.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-settings.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+
 ### Desktop favorites config
 
 The upstream CyberChef favourites list is browser-oriented and stored in
@@ -92,7 +120,7 @@ Behavior:
 - favourites are loaded from a desktop config file on startup
 - edits made through CyberChef's built-in favourites UI save back to that file
 - returning focus to the app reloads the config file
-- the `Settings` menu can reload or reset favourites
+- the settings window can reload or reset favourites
 - the config file is created automatically with the default CyberChef favourites
 - default path is `~/.config/cyberchef/favorite.json`
 
@@ -126,7 +154,7 @@ Behavior:
 
 - options are loaded from a desktop config file during app startup
 - changes made through CyberChef's built-in options dialog save back to that file
-- the `Settings` menu can reload or reset settings
+- the settings window can reload or reset settings
 - the options config file is created automatically with the current desktop defaults
 - default path is `~/.config/cyberchef/options.json`
 
@@ -163,7 +191,7 @@ Behavior:
 - the Auto Bake toggle is saved with the session
 - the active input and output tab selection are saved with the session
 - the last saved session is restored automatically on startup
-- the `Settings` menu can reload or reset the session
+- the settings window can reload or reset the session
 - the main window uses `~/.config/cyberchef/session.json`
 - additional native windows use `~/.config/cyberchef/windows/<label>/session.json`
 
@@ -213,9 +241,9 @@ also supports redirecting that config tree to another folder under user control.
 
 Behavior:
 
-- the `Settings` menu exposes `Open Config Folder`, `Choose Config Folder...`, and `Use Default Config Folder`
+- the settings window exposes `Open Folder`, `Choose Folder`, and `Use Default`
 - an override can also be set with the `CYBERCHEF_CONFIG_DIR` environment variable
-- menu-driven overrides are recorded in `~/.config/cyberchef/config-dir.json`
+- settings-window overrides are recorded in `~/.config/cyberchef/config-dir.json`
 - changing the config folder immediately reloads favorites, settings, and session state from the new location
 
 Primary implementation:
@@ -239,7 +267,7 @@ Behavior:
 - window size, position, and maximized state are saved to `window.json`
 - the main window uses `~/.config/cyberchef/window.json`
 - additional native windows use `~/.config/cyberchef/windows/<label>/window.json`
-- the `Settings` menu exposes `Reset Window State`
+- the settings window exposes `Reset Window State`
 
 Primary implementation:
 
@@ -258,14 +286,16 @@ When updating CyberChef, review at least these areas:
 1. Build and staging still inject wrapper assets into the staged dist.
 2. Desktop font override still applies to the intended UI and does not break icons or editor readability.
 3. Save recipe opens the desktop-aware flow and stores files in the recipes folder.
-4. Load recipe lists saved files from the folder and loads them correctly.
-5. Delete recipe removes the selected saved file from the folder.
-6. Favorites reload from the desktop config file and in-app edits write back to it.
-7. Options reload from the desktop config file and in-app edits write back to it.
-8. Session restore saves and restores the full active tab set correctly.
-9. Config folder override and reset actions still work.
-10. Window state restores correctly.
-11. Tauri app still builds and launches after the vendor update.
+4. Changing the recipe folder updates save/load behavior without restarting the app.
+5. Load recipe lists saved files from the folder and loads them correctly.
+6. Delete recipe removes the selected saved file from the folder.
+7. Settings window opens and shows the current desktop folders and file paths.
+8. Favorites reload from the desktop config file and in-app edits write back to it.
+9. Options reload from the desktop config file and in-app edits write back to it.
+10. Session restore saves and restores the full active tab set correctly.
+11. Config folder override and reset actions still work.
+12. Window state restores correctly.
+13. Tauri app still builds and launches after the vendor update.
 
 ## Adding New Customizations
 

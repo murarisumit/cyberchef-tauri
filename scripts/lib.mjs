@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 export const projectRoot = path.resolve(__dirname, "..");
 export const stagedDistDir = path.join(projectRoot, ".artifacts", "cyberchef-dist");
 export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef");
+export const cyberChefPublicDir = path.join(vendoredCyberChefDir, "public");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
 export const wrapperAssetsDir = path.join(projectRoot, "wrapper-assets");
 export const tauriBundleDmgDir = path.join(
@@ -58,8 +59,14 @@ async function applyWrapperOverrides() {
     const stagedIndexPath = path.join(stagedDistDir, "index.html");
     const stagedFontOverridePath = path.join(stagedDistDir, "tauri-font-override.css");
     const stagedDesktopBridgePath = path.join(stagedDistDir, "tauri-desktop.js");
+    const stagedSettingsPagePath = path.join(stagedDistDir, "settings.html");
+    const stagedSettingsScriptPath = path.join(stagedDistDir, "tauri-settings.js");
+    const stagedSettingsStylesPath = path.join(stagedDistDir, "tauri-settings.css");
     const sourceFontOverridePath = path.join(wrapperAssetsDir, "tauri-font-override.css");
     const sourceDesktopBridgePath = path.join(wrapperAssetsDir, "tauri-desktop.js");
+    const sourceSettingsPagePath = path.join(wrapperAssetsDir, "settings.html");
+    const sourceSettingsScriptPath = path.join(wrapperAssetsDir, "tauri-settings.js");
+    const sourceSettingsStylesPath = path.join(wrapperAssetsDir, "tauri-settings.css");
     const fontOverrideTag = '<link href="tauri-font-override.css" rel="stylesheet">';
     const desktopBridgeTag = '<script defer="defer" src="tauri-desktop.js"></script>';
 
@@ -73,6 +80,18 @@ async function applyWrapperOverrides() {
 
     if (!(await pathExists(sourceDesktopBridgePath))) {
         throw new Error(`Wrapper desktop bridge not found at ${sourceDesktopBridgePath}`);
+    }
+
+    if (!(await pathExists(sourceSettingsPagePath))) {
+        throw new Error(`Wrapper settings page not found at ${sourceSettingsPagePath}`);
+    }
+
+    if (!(await pathExists(sourceSettingsScriptPath))) {
+        throw new Error(`Wrapper settings script not found at ${sourceSettingsScriptPath}`);
+    }
+
+    if (!(await pathExists(sourceSettingsStylesPath))) {
+        throw new Error(`Wrapper settings stylesheet not found at ${sourceSettingsStylesPath}`);
     }
 
     const indexHtml = await fs.readFile(stagedIndexPath, "utf8");
@@ -93,7 +112,24 @@ async function applyWrapperOverrides() {
 
     await fs.copyFile(sourceFontOverridePath, stagedFontOverridePath);
     await fs.copyFile(sourceDesktopBridgePath, stagedDesktopBridgePath);
+    await fs.copyFile(sourceSettingsPagePath, stagedSettingsPagePath);
+    await fs.copyFile(sourceSettingsScriptPath, stagedSettingsScriptPath);
+    await fs.copyFile(sourceSettingsStylesPath, stagedSettingsStylesPath);
     await fs.writeFile(stagedIndexPath, updatedIndexHtml);
+}
+
+export async function syncDevWrapperAssets() {
+    const sourceSettingsPagePath = path.join(wrapperAssetsDir, "settings.html");
+    const sourceSettingsScriptPath = path.join(wrapperAssetsDir, "tauri-settings.js");
+    const sourceSettingsStylesPath = path.join(wrapperAssetsDir, "tauri-settings.css");
+    const targetSettingsPagePath = path.join(cyberChefPublicDir, "settings.html");
+    const targetSettingsScriptPath = path.join(cyberChefPublicDir, "tauri-settings.js");
+    const targetSettingsStylesPath = path.join(cyberChefPublicDir, "tauri-settings.css");
+
+    await fs.mkdir(cyberChefPublicDir, {recursive: true});
+    await fs.copyFile(sourceSettingsPagePath, targetSettingsPagePath);
+    await fs.copyFile(sourceSettingsScriptPath, targetSettingsScriptPath);
+    await fs.copyFile(sourceSettingsStylesPath, targetSettingsStylesPath);
 }
 
 async function resolveNvmScript() {

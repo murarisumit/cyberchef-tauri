@@ -1,10 +1,11 @@
 import process from "node:process";
-import {runInCyberChefShell} from "./lib.mjs";
+import {runInCyberChefShell, syncDevWrapperAssets} from "./lib.mjs";
 
 try {
-    await runInCyberChefShell("npm run start -- --port=8080");
+    const port = process.env.CYBERCHEF_DEV_PORT || "8080";
+    await syncDevWrapperAssets();
+    await runInCyberChefShell(`npm run start -- --port=${port}`);
 } catch (error) {
     console.error(error.message);
     process.exit(1);
 }
-
