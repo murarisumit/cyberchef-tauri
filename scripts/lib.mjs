@@ -13,7 +13,33 @@ export const stagedDistDir = path.join(projectRoot, ".artifacts", "cyberchef-dis
 export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
 export const wrapperAssetsDir = path.join(projectRoot, "wrapper-assets");
+export const tauriBundleDmgDir = path.join(
+    projectRoot,
+    "src-tauri",
+    "target",
+    "release",
+    "bundle",
+    "dmg"
+);
+export const githubRepo = "murarisumit/cyberchef-tauri";
+export const githubRepoUrl = `https://github.com/${githubRepo}`;
+export const homebrewTapName = "murarisumit/tap";
+export const homebrewTapRepo = "murarisumit/homebrew-tap";
+export const homebrewCaskToken = "cyberchef-tauri";
+export const homebrewCaskPath = `Casks/${homebrewCaskToken}.rb`;
 const currentNodeBinDir = path.dirname(process.execPath);
+
+export function buildReleaseTag(appVersion, cyberChefVersion) {
+    return `v${appVersion}-cyberchef.${cyberChefVersion}`;
+}
+
+export function buildReleaseAssetName(releaseTag) {
+    return `CyberChef-${releaseTag}-macos.dmg`;
+}
+
+export function buildReleaseDownloadUrl(releaseTag) {
+    return `${githubRepoUrl}/releases/download/${releaseTag}/${buildReleaseAssetName(releaseTag)}`;
+}
 
 function shellEscape(value) {
     return `'${String(value).replace(/'/g, `'\\''`)}'`;

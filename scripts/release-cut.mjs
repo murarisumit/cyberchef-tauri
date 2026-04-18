@@ -16,6 +16,8 @@ Behavior:
   - keeps package.json, package-lock.json, and src-tauri/tauri.conf.json aligned
   - runs npm run release:check
   - creates a release commit and annotated tag
+  - leaves the DMG build and tap sync to:
+      npm run release:bundle
   - leaves pushing to you: git push && git push --tags
 `);
 }
@@ -187,7 +189,10 @@ Tag: ${releaseTag}
 
 Push with:
 git push
-git push --tags`);
+git push --tags
+
+Then update the local Homebrew tap:
+npm run release:bundle`);
 }
 
 try {

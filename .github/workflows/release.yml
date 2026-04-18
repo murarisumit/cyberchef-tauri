@@ -68,11 +68,26 @@ jobs:
           test -n "$dmg_path"
           cp "$dmg_path" CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg
 
+      - name: Generate Homebrew Cask
+        id: homebrew_cask
+        run: |
+          node ./scripts/homebrew-cask.mjs \
+            --artifact CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg \
+            --output "${{ steps.meta.outputs.homebrew_cask_token }}.rb" \
+            --github-output
+
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v7
         with:
           name: CyberChef-${{ steps.meta.outputs.release_tag }}-macos
           path: CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg
+          if-no-files-found: error
+
+      - name: Upload Homebrew Cask Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Homebrew-cask-${{ steps.meta.outputs.release_tag }}
+          path: ${{ steps.homebrew_cask.outputs.output_path }}
           if-no-files-found: error
 
       - name: Publish GitHub Release
@@ -81,7 +96,9 @@ jobs:
         with:
           name: ${{ steps.meta.outputs.release_name }}
           tag_name: ${{ github.ref_name }}
-          files: CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg
+          files: |
+            CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg
+            ${{ steps.homebrew_cask.outputs.output_path }}
           generate_release_notes: true
           body: |
             App version: `${{ steps.meta.outputs.app_version }}`
@@ -103,8 +120,13 @@ jobs:
             echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
             echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
             echo "- Artifact collection: \`${{ steps.collect_artifact.conclusion }}\`"
+            echo "- Homebrew cask generation: \`${{ steps.homebrew_cask.conclusion }}\`"
             echo "- Job result: \`${{ job.status }}\`"
             if [ "${{ steps.collect_artifact.conclusion }}" = "success" ]; then
               echo "- Artifact: \`CyberChef-${{ steps.meta.outputs.release_tag }}-macos.dmg\`"
+            fi
+            if [ "${{ steps.homebrew_cask.conclusion }}" = "success" ]; then
+              echo "- Homebrew tap: \`${{ steps.meta.outputs.homebrew_tap_name }}\`"
+              echo "- Homebrew cask: \`${{ steps.meta.outputs.homebrew_cask_token }}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
