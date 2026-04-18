@@ -10,6 +10,7 @@
     "release:check": "node ./scripts/release-check.mjs",
     "release:meta": "node ./scripts/release-metadata.mjs",
     "release:tap": "node ./scripts/homebrew-cask.mjs --sync-tap",
+    "release:tap:published": "node ./scripts/release-homebrew-published.mjs",
     "release:bundle": "npm run tauri build && npm run release:tap",
     "release:homebrew": "node ./scripts/homebrew-cask.mjs",
     "release:cut": "node ./scripts/release-cut.mjs",
