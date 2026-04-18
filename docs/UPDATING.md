@@ -57,7 +57,9 @@ npm run vendor:add
    - Re-check save/load recipe behavior in the desktop app
    - Re-check favorites config reload/save behavior in the desktop app
    - Re-check options config reload/save behavior in the desktop app
-   - Re-check session restore/save behavior in the desktop app
+   - Re-check session restore/save behavior in the desktop app, including multiple tabs
+   - Re-check config folder override behavior in the desktop app
+   - Re-check window state restore behavior in the desktop app
    - Re-check wrapper-injected styling and any other desktop-only behavior
 
 5. Build the desktop app:
@@ -74,7 +76,9 @@ npm run vendor:add
    - desktop recipe save/load/delete still works
    - desktop favorites config opens, reloads, and stays in sync with in-app edits
    - desktop options config opens, reloads, and stays in sync with in-app edits
-   - desktop session restore brings back the last active workspace
+   - desktop session restore brings back the last active tab set
+   - desktop config folder override and default reset still work
+   - desktop window state restores correctly
 
 7. Commit the update:
 

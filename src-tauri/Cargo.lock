@@ -470,6 +470,8 @@ dependencies = [
 name = "cyberchef_wrapper"
 version = "0.1.0"
 dependencies = [
+ "cocoa",
+ "objc",
  "serde",
  "serde_json",
  "tauri",

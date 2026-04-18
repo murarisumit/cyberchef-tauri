@@ -59,9 +59,11 @@
     },
     "windows": [
       {
+        "label": "main",
         "fullscreen": false,
         "height": 900,
         "resizable": true,
+        "tabbingIdentifier": "cyberchef",
         "title": "CyberChef",
         "width": 1440
       }
