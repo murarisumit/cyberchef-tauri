@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>CyberChef Settings</title>
+    <link href="tauri-settings.css" rel="stylesheet">
+    <script defer="defer" src="tauri-settings.js"></script>
+</head>
+<body>
+    <div class="preferences-shell">
+        <header class="window-header">
+            <div class="window-header-copy">
+                <p class="window-kicker">CyberChef Desktop</p>
+                <h1>Settings</h1>
+                <p class="window-description">
+                    Standard desktop preferences for recipe storage, local files, and wrapper state.
+                </p>
+            </div>
+            <div class="window-summary" aria-label="Current workspace details">
+                <div class="summary-pill">
+                    <span>Workspace</span>
+                    <strong data-bind="target-window-label">main</strong>
+                </div>
+                <div class="summary-pill">
+                    <span>Recipe source</span>
+                    <strong data-bind="recipe-source">Default</strong>
+                </div>
+                <div class="summary-pill">
+                    <span>Config source</span>
+                    <strong data-bind="config-source">Default</strong>
+                </div>
+            </div>
+        </header>
+
+        <nav aria-label="Settings tabs" class="tabbar" role="tablist">
+            <button aria-controls="panel-general" aria-selected="true" class="tab-button is-active" data-tab-target="panel-general" id="tab-general" role="tab" type="button">
+                General
+            </button>
+            <button aria-controls="panel-storage" aria-selected="false" class="tab-button" data-tab-target="panel-storage" id="tab-storage" role="tab" type="button">
+                Storage
+            </button>
+            <button aria-controls="panel-files" aria-selected="false" class="tab-button" data-tab-target="panel-files" id="tab-files" role="tab" type="button">
+                Files
+            </button>
+            <button aria-controls="panel-actions" aria-selected="false" class="tab-button" data-tab-target="panel-actions" id="tab-actions" role="tab" type="button">
+                Actions
+            </button>
+        </nav>
+
+        <main class="preferences-main">
+            <section aria-labelledby="tab-general" class="tab-panel is-active" data-tab-panel="panel-general" id="panel-general" role="tabpanel">
+                <div class="panel-heading">
+                    <h2>General</h2>
+                    <p>Quick context for the active workspace and where desktop data currently comes from.</p>
+                </div>
+
+                <div class="overview-grid">
+                    <article class="overview-card">
+                        <span class="overview-label">Workspace target</span>
+                        <strong data-bind="target-window-label">main</strong>
+                        <p>Main app workspace that owns these settings and saved state.</p>
+                    </article>
+                    <article class="overview-card">
+                        <span class="overview-label">Recipe folder source</span>
+                        <strong data-bind="recipe-source">Default</strong>
+                        <p>Shows whether saved recipes use the default folder or a custom override.</p>
+                    </article>
+                    <article class="overview-card">
+                        <span class="overview-label">Config folder source</span>
+                        <strong data-bind="config-source">Default</strong>
+                        <p>Shows whether config comes from the default desktop location or an environment override.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section aria-labelledby="tab-storage" class="tab-panel" data-tab-panel="panel-storage" hidden id="panel-storage" role="tabpanel">
+                <div class="panel-heading">
+                    <h2>Storage</h2>
+                    <p>Pick where the desktop wrapper saves recipes and persistent configuration.</p>
+                </div>
+
+                <div class="panel-stack">
+                    <article class="setting-row">
+                        <div class="setting-body">
+                            <h3>Recipe folder</h3>
+                            <p class="setting-description" id="recipe-summary">
+                                Saved recipes will be written to the selected folder and loaded from there.
+                            </p>
+                            <code class="path-value" id="recipe-storage-dir"></code>
+                            <p class="setting-note">
+                                Default location: <span id="default-recipe-storage-dir"></span>
+                            </p>
+                        </div>
+                        <div class="setting-controls">
+                            <button data-action="choose_recipe_storage_dir" type="button">Choose Folder</button>
+                            <button data-action="open_recipe_storage_dir" type="button">Open Folder</button>
+                            <button class="secondary" data-action="use_default_recipe_storage_dir" type="button">
+                                Use Default
+                            </button>
+                        </div>
+                    </article>
+
+                    <article class="setting-row">
+                        <div class="setting-body">
+                            <h3>Config folder</h3>
+                            <p class="setting-description" id="config-summary">
+                                Favorites, options, session state, and window state are stored here.
+                            </p>
+                            <code class="path-value" id="config-dir"></code>
+                            <p class="setting-note">
+                                Override file: <span id="config-override-path"></span>
+                            </p>
+                        </div>
+                        <div class="setting-controls">
+                            <button data-action="choose_config_dir_from_settings" type="button">Choose Folder</button>
+                            <button data-action="open_config_dir" type="button">Open Folder</button>
+                            <button class="secondary" data-action="use_default_config_dir_from_settings" type="button">
+                                Use Default
+                            </button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section aria-labelledby="tab-files" class="tab-panel" data-tab-panel="panel-files" hidden id="panel-files" role="tabpanel">
+                <div class="panel-heading">
+                    <h2>Files</h2>
+                    <p>Desktop-owned files and paths for the current workspace target.</p>
+                </div>
+
+                <div class="file-list">
+                    <article class="file-row">
+                        <div>
+                            <h3>Favorites</h3>
+                            <p>Stored favorites for the operations sidebar.</p>
+                        </div>
+                        <code class="path-value compact" id="favorites-config-path"></code>
+                    </article>
+                    <article class="file-row">
+                        <div>
+                            <h3>Options</h3>
+                            <p>Saved wrapper and app option values.</p>
+                        </div>
+                        <code class="path-value compact" id="options-config-path"></code>
+                    </article>
+                    <article class="file-row">
+                        <div>
+                            <h3>Session</h3>
+                            <p>Current workspace input, recipe, and session state.</p>
+                        </div>
+                        <code class="path-value compact" id="session-config-path"></code>
+                    </article>
+                    <article class="file-row">
+                        <div>
+                            <h3>Window state</h3>
+                            <p>Window bounds and maximized state for this workspace.</p>
+                        </div>
+                        <code class="path-value compact" id="window-config-path"></code>
+                    </article>
+                    <article class="file-row">
+                        <div>
+                            <h3>Recipe override file</h3>
+                            <p>Stores the custom recipe folder when one is selected.</p>
+                        </div>
+                        <code class="path-value compact" id="recipe-override-path"></code>
+                    </article>
+                </div>
+            </section>
+
+            <section aria-labelledby="tab-actions" class="tab-panel" data-tab-panel="panel-actions" hidden id="panel-actions" role="tabpanel">
+                <div class="panel-heading">
+                    <h2>Actions</h2>
+                    <p>Reload or reset desktop-owned state for the current workspace.</p>
+                </div>
+
+                <div class="action-list">
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reload settings</h3>
+                            <p>Refresh desktop settings from disk without changing saved values.</p>
+                        </div>
+                        <button class="secondary" data-action="reload_settings_now" type="button">Reload</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reload favorites</h3>
+                            <p>Reload the saved favorites list for this app instance.</p>
+                        </div>
+                        <button class="secondary" data-action="reload_favorites_now" type="button">Reload</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reload session</h3>
+                            <p>Refresh the current workspace session from its saved session file.</p>
+                        </div>
+                        <button class="secondary" data-action="reload_session_now" type="button">Reload</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reset settings</h3>
+                            <p>Restore wrapper settings to their default values.</p>
+                        </div>
+                        <button class="danger" data-action="reset_settings_now" type="button">Reset</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reset favorites</h3>
+                            <p>Replace your favorites list with the default starter set.</p>
+                        </div>
+                        <button class="danger" data-action="reset_favorites_now" type="button">Reset</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reset session</h3>
+                            <p>Clear the saved recipe and input state for this workspace.</p>
+                        </div>
+                        <button class="danger" data-action="reset_session_now" type="button">Reset</button>
+                    </article>
+                    <article class="action-row">
+                        <div class="action-copy">
+                            <h3>Reset window state</h3>
+                            <p>Reset the saved window size and position for this workspace.</p>
+                        </div>
+                        <button class="danger" data-action="reset_window_state_now" type="button">Reset</button>
+                    </article>
+                </div>
+            </section>
+
+            <p class="status" id="status" role="status" aria-live="polite"></p>
+        </main>
+    </div>
+</body>
+</html>

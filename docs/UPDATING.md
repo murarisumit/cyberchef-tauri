@@ -55,10 +55,12 @@ npm run vendor:add
    - Read
      [docs/WRAPPER_CUSTOMIZATIONS.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/WRAPPER_CUSTOMIZATIONS.md)
    - Re-check save/load recipe behavior in the desktop app
+   - Re-check recipe folder switching behavior in the desktop app
    - Re-check favorites config reload/save behavior in the desktop app
    - Re-check options config reload/save behavior in the desktop app
    - Re-check session restore/save behavior in the desktop app, including multiple tabs
    - Re-check config folder override behavior in the desktop app
+   - Re-check the desktop settings window and its actions
    - Re-check window state restore behavior in the desktop app
    - Re-check wrapper-injected styling and any other desktop-only behavior
 
@@ -74,6 +76,8 @@ npm run vendor:add
    - wrapper assets are still injected into the staged dist
    - font override still looks intentional
    - desktop recipe save/load/delete still works
+   - changing the recipe folder updates save/load behavior without a restart
+   - desktop settings window opens and controls folders/reset actions correctly
    - desktop favorites config opens, reloads, and stays in sync with in-app edits
    - desktop options config opens, reloads, and stays in sync with in-app edits
    - desktop session restore brings back the last active tab set

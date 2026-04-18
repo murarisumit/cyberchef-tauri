@@ -75,27 +75,69 @@
         );
     }
 
-    function ensureOpenFolderButton() {
+    async function refreshRecipeStorageState(options = {}) {
+        const {showError = true} = options;
+
+        try {
+            recipesDir = await invoke("recipe_storage_dir");
+            updateFolderHints();
+            await populateSavedRecipes();
+        } catch (error) {
+            if (showError) {
+                alertUser(`Could not refresh recipe folder: ${error}`, 4000);
+            }
+        }
+    }
+
+    function ensureRecipeFolderButtons() {
         const footer = document.getElementById("save-footer");
 
-        if (!footer || document.getElementById("open-recipes-folder-button")) return;
+        if (!footer) return;
 
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "btn btn-secondary";
-        button.id = "open-recipes-folder-button";
-        button.textContent = "Open Folder";
-        button.addEventListener("click", async () => {
-            try {
-                const dir = await invoke("open_recipe_storage_dir");
-                recipesDir = dir;
-                updateFolderHints();
-            } catch (error) {
-                alertUser(`Could not open recipes folder: ${error}`, 4000);
+        if (!document.getElementById("open-recipes-folder-button")) {
+            const openButton = document.createElement("button");
+            openButton.type = "button";
+            openButton.className = "btn btn-secondary";
+            openButton.id = "open-recipes-folder-button";
+            openButton.textContent = "Open Folder";
+            openButton.addEventListener("click", async () => {
+                try {
+                    const dir = await invoke("open_recipe_storage_dir");
+                    recipesDir = dir;
+                    updateFolderHints();
+                } catch (error) {
+                    alertUser(`Could not open recipes folder: ${error}`, 4000);
+                }
+            });
+
+            footer.insertBefore(openButton, footer.firstChild);
+        }
+
+        if (!document.getElementById("choose-recipes-folder-button")) {
+            const chooseButton = document.createElement("button");
+            chooseButton.type = "button";
+            chooseButton.className = "btn btn-secondary";
+            chooseButton.id = "choose-recipes-folder-button";
+            chooseButton.textContent = "Change Folder";
+            chooseButton.addEventListener("click", async () => {
+                try {
+                    const dir = await invoke("choose_recipe_storage_dir");
+                    recipesDir = dir;
+                    updateFolderHints();
+                    await populateSavedRecipes();
+                    alertUser(`Recipe folder changed to ${dir}.`, 3500);
+                } catch (error) {
+                    alertUser(`Could not change recipe folder: ${error}`, 4000);
+                }
+            });
+
+            const saveButton = document.getElementById("save-button");
+            if (saveButton) {
+                footer.insertBefore(chooseButton, saveButton);
+            } else {
+                footer.appendChild(chooseButton);
             }
-        });
-
-        footer.insertBefore(button, footer.firstChild);
+        }
     }
 
     function refreshLoadSelect(recipes) {
@@ -772,10 +814,22 @@
                 await reloadSettingsFromDisk();
                 await reloadFavoritesFromDisk();
                 await reloadSessionFromDisk({force: true});
+                await refreshRecipeStorageState({showError: false});
 
                 if (typeof event.payload === "string" && event.payload.length > 0) {
                     alertUser(`Config folder changed to ${event.payload}.`, 3500);
                 }
+            });
+            await listen("desktop://recipe-storage-dir-changed", async event => {
+                if (typeof event.payload === "string" && event.payload.length > 0) {
+                    recipesDir = event.payload;
+                    updateFolderHints();
+                } else {
+                    await refreshRecipeStorageState({showError: false});
+                    return;
+                }
+
+                await populateSavedRecipes();
             });
         }
     }
@@ -869,9 +923,9 @@
     }
 
     async function initialiseDesktopRecipeStorage() {
-        recipesDir = await invoke("recipe_storage_dir");
+        await refreshRecipeStorageState({showError: false});
 
-        ensureOpenFolderButton();
+        ensureRecipeFolderButtons();
         updateFolderHints();
 
         const saveButton = document.getElementById("save-button");

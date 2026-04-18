@@ -22,7 +22,7 @@
     "build:web": "node ./scripts/build-cyberchef.mjs",
     "dev:web": "node ./scripts/dev-cyberchef.mjs",
     "sync:icons": "node ./scripts/sync-icons.mjs",
-    "tauri": "tauri"
+    "tauri": "node ./scripts/tauri-cli.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.3"
