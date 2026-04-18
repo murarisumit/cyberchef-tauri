@@ -109,8 +109,8 @@ pick it up.
    HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:bundle
    ```
 
-   This writes `Casks/cyberchef-tauri.rb` in the tap checkout using the SHA-256
-   from the freshly built local DMG.
+   This is a local preflight step only. It lets you inspect the generated cask,
+   but do not push the tap yet.
 
 3. Push the app repository release commit and tag:
 
@@ -119,7 +119,19 @@ pick it up.
    git push --tags
    ```
 
-4. In the Homebrew tap repository, commit and push the updated cask:
+4. Wait for the GitHub release workflow to finish and publish the release DMG.
+
+5. Regenerate the tap cask from the published GitHub release asset, not from
+   the local build:
+
+   ```bash
+   HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:tap:published
+   ```
+
+   The checksum in the tap must come from the exact DMG that GitHub serves for
+   the release tag. Local and GitHub-built DMGs can differ.
+
+6. In the Homebrew tap repository, commit and push the updated cask:
 
    ```bash
    cd /absolute/path/to/homebrew-tap
@@ -128,7 +140,7 @@ pick it up.
    git push
    ```
 
-5. Upgrade from Homebrew:
+7. Upgrade from Homebrew:
 
    ```bash
    brew update
@@ -163,11 +175,21 @@ brew install --cask murarisumit/tap/cyberchef-tauri
 brew upgrade --cask murarisumit/tap/cyberchef-tauri
 ```
 
-To update the local tap checkout from this repository, set `HOMEBREW_TAP_DIR`
-and run:
+To preview the tap update locally from this repository, set
+`HOMEBREW_TAP_DIR` and run:
 
 ```bash
 npm run release:bundle
+```
+
+Treat that output as a draft. Before committing the tap, regenerate the cask
+from the published GitHub release DMG.
+
+To fetch the published GitHub release DMG and write the final tap cask in one
+step:
+
+```bash
+HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:tap:published
 ```
 
 If you need to generate the cask manually from a built DMG instead:
@@ -181,10 +203,10 @@ npm run release:homebrew -- \
 Important:
 
 - Only point the cask at a GitHub release that already exists.
-- `npm run release:bundle` builds the DMG first, then `npm run release:tap`
-  writes into the checkout named by `HOMEBREW_TAP_DIR` or `--tap-dir`.
-- After `npm run release:bundle`, commit and push the tap repo before expecting
-  `brew upgrade` to see the new version.
+- `npm run release:bundle` is a local preflight helper. Do not rely on its
+  checksum for the final tap update.
+- Before committing the tap, run `npm run release:tap:published` so the
+  checksum matches what Homebrew downloads from GitHub.
 - The cask version should match the published release tag without the leading
   `v`.
 - Do not update the tap to an unreleased local app version.
