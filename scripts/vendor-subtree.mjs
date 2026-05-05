@@ -4,6 +4,7 @@ import process from "node:process";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import {
+    cyberChefMirrorBranch,
     projectRoot,
     runBash,
     vendorMetadataPath,
@@ -49,14 +50,16 @@ async function resolveUpstreamTarget(remoteUrl) {
     const output = await runGit(["ls-remote", "--symref", remoteUrl, "HEAD"]);
     const lines = output.split("\n");
     const headRefLine = lines.find(line => line.startsWith("ref: "));
-    const headCommitLine = lines.find(line => /\sHEAD$/.test(line));
+    const headCommitLine = lines.find(
+        line => !line.startsWith("ref: ") && /\s+HEAD$/.test(line)
+    );
 
     if (!headRefLine || !headCommitLine) {
         throw new Error(`Unable to resolve upstream HEAD from ${remoteUrl}`);
     }
 
-    const refMatch = headRefLine.match(/^ref:\srefs\/heads\/([^\s]+)\sHEAD$/);
-    const commitMatch = headCommitLine.match(/^([0-9a-f]+)\sHEAD$/);
+    const refMatch = headRefLine.match(/^ref:\srefs\/heads\/([^\s]+)\s+HEAD$/);
+    const commitMatch = headCommitLine.match(/^([0-9a-f]+)\s+HEAD$/);
 
     if (!refMatch || !commitMatch) {
         throw new Error(`Unable to parse upstream HEAD details from ${remoteUrl}`);
@@ -75,14 +78,20 @@ async function writeVendorMetadata({ref, commit, remoteUrl}) {
 
     const metadata = {
         importedAt: new Date().toISOString(),
-        sourcePath: `git-subtree:${remote}/${ref}`,
+        sourcePath: `git-subtree:${cyberChefMirrorBranch}`,
         version: packageJson.version || "unknown",
         commit,
         remote: remoteUrl,
         ref,
+        mirrorBranch: cyberChefMirrorBranch,
     };
 
     await fs.writeFile(vendorMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+}
+
+async function mirrorUpstreamRef(remoteName, upstream) {
+    await runGit(["fetch", remoteName, upstream.ref]);
+    await runGit(["update-ref", `refs/heads/${cyberChefMirrorBranch}`, upstream.commit]);
 }
 
 if (!["add", "pull"].includes(mode)) {
@@ -93,10 +102,11 @@ if (!["add", "pull"].includes(mode)) {
 try {
     const remoteUrl = await ensureRemote(remote, fallbackRemoteUrl);
     const upstream = await resolveUpstreamTarget(remoteUrl);
+    await mirrorUpstreamRef(remote, upstream);
     const command =
         mode === "add"
-            ? `git subtree add --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(remote)} ${JSON.stringify(upstream.ref)} --squash`
-            : `git subtree pull --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(remote)} ${JSON.stringify(upstream.ref)} --squash`;
+            ? `git subtree add --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(cyberChefMirrorBranch)}`
+            : `git subtree pull --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(cyberChefMirrorBranch)}`;
 
     await runBash(command);
     await writeVendorMetadata({

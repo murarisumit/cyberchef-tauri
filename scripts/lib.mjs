@@ -14,6 +14,8 @@ export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef"
 export const cyberChefPublicDir = path.join(vendoredCyberChefDir, "public");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
 export const wrapperAssetsDir = path.join(projectRoot, "wrapper-assets");
+export const cyberChefMirrorBranch =
+    process.env.CYBERCHEF_MIRROR_BRANCH || "upstream/cyberchef";
 export const tauriBundleDmgDir = path.join(
     projectRoot,
     "src-tauri",
@@ -188,7 +190,59 @@ export async function resolveCyberChefDir(options = {}) {
     return cyberChefDir;
 }
 
-export async function runBash(command, cwd = projectRoot) {
+function createFilteredWriter(stream, suppressPatterns = [], suppressBlocks = []) {
+    let buffer = "";
+    let activeSuppressBlock = null;
+
+    function shouldSuppressLine(line) {
+        if (activeSuppressBlock) {
+            if (activeSuppressBlock.end.test(line)) {
+                activeSuppressBlock = null;
+            }
+
+            return true;
+        }
+
+        const matchingBlock = suppressBlocks.find(block => block.start.test(line));
+
+        if (matchingBlock) {
+            activeSuppressBlock = matchingBlock;
+            if (matchingBlock.end.test(line)) {
+                activeSuppressBlock = null;
+            }
+
+            return true;
+        }
+
+        return suppressPatterns.some(pattern => pattern.test(line));
+    }
+
+    return {
+        write(chunk) {
+            buffer += chunk.toString();
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+                if (!shouldSuppressLine(line)) {
+                    stream.write(`${line}\n`);
+                }
+            }
+        },
+        flush() {
+            if (!buffer) return;
+
+            if (!shouldSuppressLine(buffer)) {
+                stream.write(buffer);
+            }
+
+            buffer = "";
+        }
+    };
+}
+
+export async function runBash(command, cwd = projectRoot, options = {}) {
+    const {suppressOutputBlocks = [], suppressOutputPatterns = []} = options;
     const env = {
         ...process.env,
         NODE: process.execPath,
@@ -199,10 +253,30 @@ export async function runBash(command, cwd = projectRoot) {
         const child = spawn("bash", ["-c", command], {
             cwd,
             env,
-            stdio: "inherit",
+            stdio: suppressOutputPatterns.length ? ["inherit", "pipe", "pipe"] : "inherit",
         });
 
+        let stdoutWriter = null;
+        let stderrWriter = null;
+
+        if (suppressOutputPatterns.length || suppressOutputBlocks.length) {
+            stdoutWriter = createFilteredWriter(
+                process.stdout,
+                suppressOutputPatterns,
+                suppressOutputBlocks
+            );
+            stderrWriter = createFilteredWriter(
+                process.stderr,
+                suppressOutputPatterns,
+                suppressOutputBlocks
+            );
+            child.stdout.on("data", chunk => stdoutWriter.write(chunk));
+            child.stderr.on("data", chunk => stderrWriter.write(chunk));
+        }
+
         child.on("exit", code => {
+            stdoutWriter?.flush();
+            stderrWriter?.flush();
             if (code === 0) resolve();
             else reject(new Error(`Command failed with exit code ${code}: ${command}`));
         });
@@ -211,7 +285,7 @@ export async function runBash(command, cwd = projectRoot) {
     });
 }
 
-export async function runInCyberChefShell(command) {
+export async function runInCyberChefShell(command, options = {}) {
     const cyberChefDir = await resolveCyberChefDir();
     const nvmScript = await resolveNvmScript();
     const nvmrcValue = await readNvmrc(cyberChefDir);
@@ -225,12 +299,13 @@ export async function runInCyberChefShell(command) {
 
     if (shouldUseNvm) {
         steps.unshift(`source ${shellEscape(nvmScript)}`);
+        steps.push("nvm install >/dev/null");
         steps.push("nvm use >/dev/null");
     }
 
     steps.push(command);
 
-    await runBash(steps.join(" && "));
+    await runBash(steps.join(" && "), projectRoot, options);
 }
 
 export async function stageCyberChefBuild() {
