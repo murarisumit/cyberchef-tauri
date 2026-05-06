@@ -30,8 +30,9 @@ async function resolveRemoteUrl() {
 
 async function resolveUpstreamTarget(remoteUrl) {
     if (configuredRef) {
-        const commitOutput = await runGit(["ls-remote", remoteUrl, configuredRef]);
-        const [commit = ""] = commitOutput.split(/\s+/, 1);
+        const peeledOutput = await runGit(["ls-remote", remoteUrl, `${configuredRef}^{}`]);
+        const directOutput = peeledOutput || await runGit(["ls-remote", remoteUrl, configuredRef]);
+        const [commit = ""] = directOutput.split(/\s+/, 1);
 
         if (!commit) {
             throw new Error(`Unable to resolve upstream ref ${configuredRef} from ${remoteUrl}`);
