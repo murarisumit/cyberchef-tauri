@@ -43,36 +43,12 @@ distribution, or broader website release workflow.
 
 ## Local Development
 
-Install wrapper dependencies:
+Install dependencies:
 
 ```bash
 npm install
-```
-
-Install vendored CyberChef dependencies:
-
-```bash
 npm run prepare:cyberchef
 ```
-
-Fast-path vendored CyberChef update:
-
-```bash
-npm run vendor:update -- 11.0.0
-```
-
-To pull the latest upstream tagged release, omit the version:
-
-```bash
-npm run vendor:update
-```
-
-This command vendors the requested CyberChef version, installs its dependencies,
-and runs the release metadata consistency check. Add `--build-web` if you also
-want to rebuild the staged web app during the update.
-
-The default in-repo upstream mirror branch name is `upstream/cyberchef`. You
-can override it with `CYBERCHEF_MIRROR_BRANCH` if needed.
 
 Run the desktop app in development mode:
 
@@ -86,28 +62,14 @@ Build the desktop app:
 npm run tauri build
 ```
 
-Use the full Tauri build only when you need a desktop packaging check or a
-release artifact. A normal vendor refresh does not need to wait for DMG bundling.
-
-Install or upgrade the released macOS app from Homebrew:
+Refresh the vendored CyberChef version:
 
 ```bash
-brew tap murarisumit/tap
-brew install --cask murarisumit/tap/cyberchef-tauri
-brew upgrade --cask murarisumit/tap/cyberchef-tauri
+npm run vendor:update -- 11.0.0
 ```
 
-Sync the local Homebrew tap cask after a local release build:
-
-```bash
-HOMEBREW_TAP_DIR=/absolute/path/to/homebrew-tap npm run release:bundle
-```
-
-Regenerate wrapper icons from CyberChef assets:
-
-```bash
-npm run sync:icons
-```
+Operational update, release, and Homebrew guidance lives in
+[docs/UPDATING.md](/Users/sumitmurari/workspace/personal/cyberchef-tauri/docs/UPDATING.md).
 
 ## How The Build Works
 
@@ -129,11 +91,9 @@ src-tauri/target/release/bundle/dmg/*.dmg
 
 ## GitHub Actions
 
-- `.github/workflows/ci.yml`: macOS validation on pushes and pull requests,
-  including dependency preparation and a full desktop build check
-- `.github/workflows/release.yml`: tag-driven macOS release build
-- `.github/workflows/cyberchef-upstream-build.yml`: daily upstream check that
-  refreshes the vendor snapshot and builds a DMG when CyberChef has moved upstream
+- `.github/workflows/ci.yml`: macOS validation on pushes and pull requests
+- `.github/workflows/release.yml`: tag-driven macOS release build and GitHub release publishing
+- `.github/workflows/cyberchef-upstream-build.yml`: scheduled upstream update detection and DMG build
 
 ## Related Docs
 

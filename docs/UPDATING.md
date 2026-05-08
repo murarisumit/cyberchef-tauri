@@ -43,8 +43,6 @@ upstream/cyberchef
 Set `CYBERCHEF_MIRROR_BRANCH` only if you intentionally want a different mirror
 branch name.
 
-## Standard Update Flow
-
 ## Fast Path
 
 For a normal vendor refresh, use the single-command path first:
@@ -76,7 +74,7 @@ npm run vendor:update -- 11.0.0 --build-web
 Use this when you want the staged web build refreshed too. Do not default to a
 full Tauri build for routine vendor bumps.
 
-## Full Manual Flow
+## Manual Flow
 
 1. Refresh the in-repo upstream mirror branch and vendor import:
 
@@ -136,6 +134,13 @@ full Tauri build for routine vendor bumps.
    ```bash
    git commit -am "chore(vendor): update CyberChef to <version>"
    ```
+
+8. Push both histories when you want the remote to reflect the vendor update model:
+
+  ```bash
+  git push origin main
+  git push origin upstream/cyberchef
+  ```
 
 ## Release Flow After Update
 
@@ -270,9 +275,9 @@ Important:
 - `.github/workflows/cyberchef-upstream-build.yml` runs daily, checks the
   current upstream CyberChef HEAD, and only builds a fresh DMG artifact when
   the vendored commit is behind.
-- `.github/workflows/ci.yml` is a fast validation-only workflow that checks
-  release metadata and wrapper customization markers without installing
-  vendored dependencies, building the app, or uploading artifacts.
+- `.github/workflows/ci.yml` validates the buildable desktop app path on macOS,
+  including vendored dependency preparation, metadata checks, wrapper checks,
+  and a full `tauri build` run. It does not publish release artifacts.
 
 Tauri writes the macOS disk image into:
 
@@ -280,10 +285,10 @@ Tauri writes the macOS disk image into:
 src-tauri/target/release/bundle/dmg/*.dmg
 ```
 
-## Bootstrap or Recovery Path
+## Recovery Path
 
-If subtree state is not ready yet, you can refresh the vendor directory from a
-local CyberChef checkout instead:
+If subtree state is broken and you need a one-off recovery import from a local
+CyberChef checkout, you can still use:
 
 ```bash
 CYBERCHEF_IMPORT_DIR=/absolute/path/to/CyberChef npm run vendor:cyberchef
@@ -311,8 +316,9 @@ v<app-version>-cyberchef.<cyberchef-version>
 ## Common Failure Modes
 
 - `npm run vendor:pull` fails:
-  The subtree remote is missing or the repo was not seeded with subtree history
-  yet. Add `cyberchef-upstream` and run `npm run vendor:add` once.
+  The subtree remote is missing, the repo was not seeded with subtree history
+  yet, or the mirror branch has not been bootstrapped. Add
+  `cyberchef-upstream` and run `npm run vendor:add` once.
 
 - `npm run prepare:cyberchef` fails:
   Re-run after a clean vendor refresh. The vendored dependency tree should be
@@ -325,6 +331,11 @@ v<app-version>-cyberchef.<cyberchef-version>
 - `npm run tauri build` fails after a vendor update:
   Treat that as a real integration issue between wrapper and vendored CyberChef,
   not as a release-tagging problem.
+
+- `npm run tauri build` fails during DMG packaging on macOS:
+  Check for a leftover `/Volumes/CyberChef` mount from a prior failed bundle.
+  The wrapper now attempts to clean this up automatically before build, but if a
+  failure still occurs, detach the mounted volume and rerun the build.
 
 - Desktop-only wrapper behavior regresses after a vendor update:
   Compare the updated upstream save/load modal markup, event wiring, and
