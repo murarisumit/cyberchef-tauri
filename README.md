@@ -15,6 +15,18 @@ desktop wrapper.
 - staged web build output in `.artifacts/cyberchef-dist/`
 - icon generation from CyberChef assets
 
+## History Model
+
+This repository uses a two-track history model inside a single Git repository:
+
+- `main` contains the desktop wrapper and the vendored CyberChef tree at `vendor/cyberchef`
+- `upstream/cyberchef` is the dedicated in-repo mirror branch for upstream CyberChef history
+
+The mirror branch is kept aligned with upstream, and `main` imports it into
+`vendor/cyberchef` using unsquashed subtree semantics. This keeps the wrapper
+history and CyberChef history distinct while keeping the repository complete on
+its own.
+
 This repo does not own CyberChef's upstream release packaging, website ZIP
 distribution, or broader website release workflow.
 
@@ -43,6 +55,25 @@ Install vendored CyberChef dependencies:
 npm run prepare:cyberchef
 ```
 
+Fast-path vendored CyberChef update:
+
+```bash
+npm run vendor:update -- 11.0.0
+```
+
+To pull the latest upstream tagged release, omit the version:
+
+```bash
+npm run vendor:update
+```
+
+This command vendors the requested CyberChef version, installs its dependencies,
+and runs the release metadata consistency check. Add `--build-web` if you also
+want to rebuild the staged web app during the update.
+
+The default in-repo upstream mirror branch name is `upstream/cyberchef`. You
+can override it with `CYBERCHEF_MIRROR_BRANCH` if needed.
+
 Run the desktop app in development mode:
 
 ```bash
@@ -54,6 +85,9 @@ Build the desktop app:
 ```bash
 npm run tauri build
 ```
+
+Use the full Tauri build only when you need a desktop packaging check or a
+release artifact. A normal vendor refresh does not need to wait for DMG bundling.
 
 Install or upgrade the released macOS app from Homebrew:
 
@@ -95,13 +129,11 @@ src-tauri/target/release/bundle/dmg/*.dmg
 
 ## GitHub Actions
 
-- `.github/workflows/ci.yml`: macOS validation on pushes and pull requests
-- `.github/workflows/ci.yml` runs lightweight metadata and wrapper
-  customization checks only; it does not install vendored dependencies, build
-  the app, or publish artifacts
+- `.github/workflows/ci.yml`: macOS validation on pushes and pull requests,
+  including dependency preparation and a full desktop build check
 - `.github/workflows/release.yml`: tag-driven macOS release build
 - `.github/workflows/cyberchef-upstream-build.yml`: daily upstream check that
-  builds a DMG when CyberChef has moved upstream
+  refreshes the vendor snapshot and builds a DMG when CyberChef has moved upstream
 
 ## Related Docs
 

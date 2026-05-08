@@ -1,0 +1,9 @@
+{
+  "importedAt": "2026-05-06T14:49:55.549Z",
+  "sourcePath": "git-subtree:upstream/cyberchef",
+  "version": "11.0.0",
+  "commit": "8de0ded56cfd59c284573faa4767e5d55733cc57",
+  "remote": "https://github.com/gchq/CyberChef.git",
+  "ref": "v11.0.0",
+  "mirrorBranch": "upstream/cyberchef"
+}

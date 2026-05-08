@@ -9,6 +9,7 @@ jobs:
   build-on-upstream-update:
     runs-on: macos-latest
     env:
+      CI: "1"
       CYBERCHEF_SKIP_NVM: "1"
 
     steps:
@@ -58,24 +59,12 @@ jobs:
       - name: Update Vendored CyberChef
         id: update_vendor
         if: steps.upstream.outputs.updated == 'true'
-        env:
-          CYBERCHEF_SUBTREE_REF: ${{ steps.upstream.outputs.upstream_ref }}
-        run: npm run vendor:pull
-
-      - name: Install Vendored CyberChef Dependencies
-        id: prepare
-        if: steps.upstream.outputs.updated == 'true'
-        run: npm run prepare:cyberchef
+        run: npm run vendor:update -- --ref "${{ steps.upstream.outputs.upstream_ref }}"
 
       - name: Print Release Metadata
         id: meta
         if: steps.upstream.outputs.updated == 'true'
         run: node ./scripts/release-metadata.mjs --github-output
-
-      - name: Validate Release Metadata
-        id: release_check
-        if: steps.upstream.outputs.updated == 'true'
-        run: npm run release:check
 
       - name: Doctor
         id: doctor
@@ -124,8 +113,6 @@ jobs:
               echo "- CyberChef version: \`${{ steps.meta.outputs.cyberchef_version }}\`"
               echo "- Release tag: \`${{ steps.meta.outputs.release_tag }}\`"
               echo "- Update vendor subtree: \`${{ steps.update_vendor.conclusion }}\`"
-              echo "- Prepare vendored dependencies: \`${{ steps.prepare.conclusion }}\`"
-              echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
               echo "- Doctor: \`${{ steps.doctor.conclusion }}\`"
               echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
               echo "- Artifact collection: \`${{ steps.collect_artifact.conclusion }}\`"

@@ -10,14 +10,41 @@ on:
 jobs:
   macos-build:
     runs-on: macos-latest
+    env:
+      CI: "1"
+      CYBERCHEF_SKIP_NVM: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: vendor/cyberchef/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor/cyberchef/package-lock.json
+
       - name: Capture Node Version
         id: node_info
         run: echo "version=$(node -v)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Wrapper Dependencies
+        run: npm ci
+
+      - name: Install Vendored CyberChef Dependencies
+        id: prepare
+        run: npm run prepare:cyberchef
 
       - name: Print Release Metadata
         id: meta
@@ -31,6 +58,14 @@ jobs:
         id: wrapper_check
         run: npm run wrapper:check
 
+      - name: Doctor
+        id: doctor
+        run: npm run doctor
+
+      - name: Build Desktop App
+        id: build
+        run: npm run tauri build
+
       - name: Write Job Summary
         if: always()
         run: |
@@ -42,8 +77,11 @@ jobs:
             echo "- CyberChef version: \`${{ steps.meta.outputs.cyberchef_version }}\`"
             echo "- Expected release tag: \`${{ steps.meta.outputs.release_tag }}\`"
             echo "- Vendored commit: \`${{ steps.meta.outputs.vendor_commit }}\`"
+            echo "- Prepare vendored dependencies: \`${{ steps.prepare.conclusion }}\`"
             echo "- Release metadata check: \`${{ steps.release_check.conclusion }}\`"
             echo "- Wrapper customization check: \`${{ steps.wrapper_check.conclusion }}\`"
+            echo "- Doctor: \`${{ steps.doctor.conclusion }}\`"
+            echo "- Desktop build: \`${{ steps.build.conclusion }}\`"
             echo "- Job result: \`${{ job.status }}\`"
-            echo "- Packaging: skipped in CI; release workflows handle builds and artifacts"
+            echo "- Packaging artifact upload: skipped in CI; release workflows publish artifacts"
           } >> "$GITHUB_STEP_SUMMARY"

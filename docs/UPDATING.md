@@ -8,11 +8,15 @@ still builds, and optionally cut a release tied to the new CyberChef version.
 ## Model
 
 - This repository is the source of truth for the desktop app.
-- Upstream CyberChef is vendored into `vendor/cyberchef`.
-- The preferred long-term update mechanism is `git subtree`.
+- Upstream CyberChef is mirrored on the in-repo branch `upstream/cyberchef` by default.
+- `main` vendors CyberChef into `vendor/cyberchef` using unsquashed `git subtree` history.
 - App versioning stays in this repository.
 - CyberChef versioning stays in the vendored source and
   `vendor/cyberchef.vendor.json`.
+
+This keeps the repository self-contained while preserving a distinct wrapper
+history on `main` and a distinct upstream-style CyberChef history on the mirror
+branch.
 
 ## One-Time Setup
 
@@ -29,9 +33,52 @@ If this repository was bootstrapped without subtree history, seed the subtree:
 npm run vendor:add
 ```
 
+Branch naming convention:
+
+```bash
+main
+upstream/cyberchef
+```
+
+Set `CYBERCHEF_MIRROR_BRANCH` only if you intentionally want a different mirror
+branch name.
+
 ## Standard Update Flow
 
-1. Pull the latest vendored CyberChef source:
+## Fast Path
+
+For a normal vendor refresh, use the single-command path first:
+
+```bash
+npm run vendor:update -- <version>
+```
+
+Examples:
+
+```bash
+npm run vendor:update -- 11.0.0
+npm run vendor:update
+```
+
+What this does:
+
+- fast-forwards the in-repo CyberChef mirror branch to the requested upstream ref
+- imports that mirror branch into `main` at `vendor/cyberchef` using unsquashed subtree history
+- installs vendored dependencies using the version from `.nvmrc`
+- runs `npm run release:check`
+
+Optional:
+
+```bash
+npm run vendor:update -- 11.0.0 --build-web
+```
+
+Use this when you want the staged web build refreshed too. Do not default to a
+full Tauri build for routine vendor bumps.
+
+## Full Manual Flow
+
+1. Refresh the in-repo upstream mirror branch and vendor import:
 
    ```bash
    npm run vendor:pull

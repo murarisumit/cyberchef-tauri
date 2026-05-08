@@ -13,6 +13,7 @@ jobs:
   macos-release:
     runs-on: macos-latest
     env:
+      CI: "1"
       CYBERCHEF_SKIP_NVM: "1"
 
     steps:

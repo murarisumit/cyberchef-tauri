@@ -47,14 +47,16 @@ async function resolveUpstreamTarget(remoteUrl) {
     const output = await runGit(["ls-remote", "--symref", remoteUrl, "HEAD"]);
     const lines = output.split("\n");
     const headRefLine = lines.find(line => line.startsWith("ref: "));
-    const headCommitLine = lines.find(line => /\sHEAD$/.test(line));
+    const headCommitLine = lines.find(
+        line => !line.startsWith("ref: ") && /\s+HEAD$/.test(line)
+    );
 
     if (!headRefLine || !headCommitLine) {
         throw new Error(`Unable to resolve upstream HEAD from ${remoteUrl}`);
     }
 
-    const refMatch = headRefLine.match(/^ref:\srefs\/heads\/([^\s]+)\sHEAD$/);
-    const commitMatch = headCommitLine.match(/^([0-9a-f]+)\sHEAD$/);
+    const refMatch = headRefLine.match(/^ref:\srefs\/heads\/([^\s]+)\s+HEAD$/);
+    const commitMatch = headCommitLine.match(/^([0-9a-f]+)\s+HEAD$/);
 
     if (!refMatch || !commitMatch) {
         throw new Error(`Unable to parse upstream HEAD details from ${remoteUrl}`);

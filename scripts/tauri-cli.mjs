@@ -3,8 +3,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import {spawn} from "node:child_process";
+import {execFile, spawn} from "node:child_process";
+import {promisify} from "node:util";
 import {projectRoot} from "./lib.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const tauriBin = path.join(
     projectRoot,
@@ -56,6 +59,32 @@ function findAvailablePort() {
     });
 }
 
+async function cleanupMountedCyberChefVolume() {
+    if (process.platform !== "darwin") return;
+
+    try {
+        await fs.access("/Volumes/CyberChef");
+    } catch {
+        return;
+    }
+
+    const detachArgs = [
+        ["detach", "/Volumes/CyberChef"],
+        ["detach", "-force", "/Volumes/CyberChef"],
+    ];
+
+    for (const args of detachArgs) {
+        try {
+            await execFileAsync("hdiutil", args);
+            return;
+        } catch {
+            // Try the next detach strategy.
+        }
+    }
+
+    throw new Error("Unable to detach existing /Volumes/CyberChef mount before build");
+}
+
 async function createDevConfig(port) {
     const config = JSON.parse(await fs.readFile(tauriConfigPath, "utf8"));
 
@@ -77,6 +106,10 @@ async function run() {
     const args = process.argv.slice(2);
 
     if (args[0] !== "dev") {
+        if (args[0] === "build") {
+            await cleanupMountedCyberChefVolume();
+        }
+
         await spawnTauri(args);
         return;
     }
