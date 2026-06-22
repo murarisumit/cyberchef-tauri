@@ -106,8 +106,8 @@ try {
     await mirrorUpstreamRef(remote, upstream);
     const command =
         mode === "add"
-            ? `git subtree add --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(cyberChefMirrorBranch)}`
-            : `git subtree pull --prefix=${JSON.stringify("vendor/cyberchef")} ${JSON.stringify(cyberChefMirrorBranch)}`;
+            ? `git subtree add --prefix=${JSON.stringify("vendor/cyberchef")} . ${JSON.stringify(cyberChefMirrorBranch)}`
+            : `git subtree pull --prefix=${JSON.stringify("vendor/cyberchef")} . ${JSON.stringify(cyberChefMirrorBranch)}`;
 
     await runBash(command);
     await writeVendorMetadata({
