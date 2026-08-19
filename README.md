@@ -7,6 +7,37 @@ The goal is simple: keep desktop-specific work in this repo, keep CyberChef
 under `vendor/cyberchef`, and avoid carrying a long-lived fork just to ship a
 desktop wrapper.
 
+## Install
+
+### Homebrew
+
+```bash
+brew tap murarisumit/tap
+brew install --cask cyberchef-tauri
+```
+
+Upgrade to a newer release:
+
+```bash
+brew update
+brew upgrade --cask cyberchef-tauri
+```
+
+Uninstall:
+
+```bash
+brew uninstall --cask cyberchef-tauri
+```
+
+### Manual Download
+
+1. Download the latest `.dmg` from
+   [releases](https://github.com/murarisumit/cyberchef-tauri/releases)
+2. Open the disk image and drag `CyberChef.app` into `/Applications`
+
+Maintainer guidance for publishing the tap lives in
+[docs/UPDATING.md](docs/UPDATING.md).
+
 ## What This Repo Owns
 
 - Tauri config and Rust shell in `src-tauri/`
