@@ -5,6 +5,7 @@ import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import {
     cyberChefMirrorBranch,
+    ensureCommitSigningReady,
     projectRoot,
     runBash,
     vendorMetadataPath,
@@ -101,6 +102,12 @@ if (!["add", "pull"].includes(mode)) {
 }
 
 try {
+    // The subtree import ends in a merge commit. Checking the signer up front
+    // keeps a blocked passphrase prompt from stalling a long running import.
+    if (process.env.CYBERCHEF_SKIP_SIGNING_CHECK !== "1") {
+        await ensureCommitSigningReady();
+    }
+
     const remoteUrl = await ensureRemote(remote, fallbackRemoteUrl);
     const upstream = await resolveUpstreamTarget(remoteUrl);
     await mirrorUpstreamRef(remote, upstream);
