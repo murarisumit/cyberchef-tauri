@@ -331,6 +331,44 @@ Review impact when upstream changes:
 - state moves from the URL fragment into the query string
 - `loadURIParams` stops being callable without arguments
 
+### About panel version
+
+macOS renders its standard About panel as
+`Version <CFBundleShortVersionString> (<CFBundleVersion>)`. Tauri fills the
+first from the app version and the second with a build timestamp, so the panel
+said nothing about which CyberChef the build actually contains.
+
+Behavior:
+
+- the About panel reads `Version 0.1.5 (CyberChef 11.2.0)`
+- the wrapper version and the vendored CyberChef version are both visible, and
+  the CyberChef one is labelled so the two cannot be confused
+- the build timestamp Tauri would otherwise put there is dropped
+
+Primary implementation:
+
+- [src-tauri/Info.plist](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/Info.plist)
+- [scripts/lib.mjs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/scripts/lib.mjs)
+- [scripts/release-check.mjs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/scripts/release-check.mjs)
+
+Why the plist and not Tauri's API: `MenuItem::About` carries an
+`AboutMetadata` struct, but the macOS backend in Tauri 1.x discards it and calls
+`orderFrontStandardAboutPanel:`, which reads the bundled `Info.plist` directly.
+Setting the metadata in Rust has no effect. The bundler merges
+`src-tauri/Info.plist` last, so the value there wins over the generated one.
+
+Keeping it honest:
+
+- `npm run vendor:update` rewrites `CFBundleVersion` via
+  `syncInfoPlistBundleVersion`, on both the subtree and recovery import paths
+- `npm run release:check` fails if `CFBundleVersion` drifts from the vendored
+  CyberChef version, or if the key goes missing entirely
+
+Review impact when upstream changes:
+
+- the vendored CyberChef version scheme changes shape
+- Tauri gains a working macOS About metadata API and this can move into Rust
+
 ## Update Review Checklist
 
 When updating CyberChef, review at least these areas:
@@ -349,7 +387,8 @@ When updating CyberChef, review at least these areas:
 12. Window state restores correctly.
 13. Deep link in the save pane still reads `cyberchef-tauri://localhost/#...`.
 14. Opening a `cyberchef-tauri://` link loads the recipe into the app.
-15. Tauri app still builds and launches after the vendor update.
+15. About panel shows the wrapper version and the new CyberChef version.
+16. Tauri app still builds and launches after the vendor update.
 
 ## Adding New Customizations
 

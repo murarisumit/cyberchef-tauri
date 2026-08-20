@@ -7,6 +7,7 @@ import {
     cyberChefMirrorBranch,
     projectRoot,
     runBash,
+    syncInfoPlistBundleVersion,
     vendorMetadataPath,
     vendoredCyberChefDir,
 } from "./lib.mjs";
@@ -88,6 +89,11 @@ async function writeVendorMetadata({ref, commit, remoteUrl}) {
     };
 
     await fs.writeFile(vendorMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+
+    // The macOS About panel reads this from the bundled Info.plist, so it has
+    // to move with the vendored version. `npm run release:check` fails if it
+    // does not.
+    await syncInfoPlistBundleVersion(metadata.version);
 }
 
 async function mirrorUpstreamRef(remoteName, upstream) {

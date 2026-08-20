@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <!-- Carries the vendored CyberChef version into the macOS About panel,
+         which renders "Version <CFBundleShortVersionString> (<CFBundleVersion>)".
+         Tauri's own AboutMetadata API is a no-op on macOS in Tauri 1.x, so the
+         bundled Info.plist is the only way to get this in front of a user.
+         Kept in sync by scripts/lib.mjs and enforced by `npm run release:check`. -->
+    <key>CFBundleVersion</key>
+    <string>CyberChef 11.2.0</string>
     <key>CFBundleURLTypes</key>
     <array>
       <dict>

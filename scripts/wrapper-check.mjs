@@ -216,6 +216,9 @@ try {
     // macOS registers the scheme from the bundled Info.plist, which the Tauri
     // bundler merges from this file. Without it the plugin silently never fires.
     requireIncludes("src-tauri/Info.plist", tauriInfoPlist, [
+        // The About panel renders CFBundleVersion; release:check pins its value.
+        "<key>CFBundleVersion</key>",
+        "<string>CyberChef ",
         "<key>CFBundleURLTypes</key>",
         "<key>CFBundleURLSchemes</key>",
         "<string>cyberchef-tauri</string>",

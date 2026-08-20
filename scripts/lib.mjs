@@ -14,6 +14,7 @@ export const vendoredCyberChefDir = path.join(projectRoot, "vendor", "cyberchef"
 export const cyberChefPublicDir = path.join(vendoredCyberChefDir, "public");
 export const vendorMetadataPath = path.join(projectRoot, "vendor", "cyberchef.vendor.json");
 export const wrapperAssetsDir = path.join(projectRoot, "wrapper-assets");
+export const infoPlistPath = path.join(projectRoot, "src-tauri", "Info.plist");
 export const cyberChefMirrorBranch =
     process.env.CYBERCHEF_MIRROR_BRANCH || "upstream/cyberchef";
 export const tauriBundleDmgDir = path.join(
@@ -38,6 +39,51 @@ export function buildReleaseTag(appVersion, cyberChefVersion) {
 
 export function buildReleaseAssetName(releaseTag) {
     return `CyberChef-${releaseTag}-macos.dmg`;
+}
+
+// macOS renders the About panel as
+// `Version <CFBundleShortVersionString> (<CFBundleVersion>)`. Tauri fills the
+// first from the app version, and would otherwise fill the second with a build
+// timestamp. We carry the vendored CyberChef version there instead, labelled so
+// the two numbers cannot be mistaken for each other.
+export function buildBundleVersion(cyberChefVersion) {
+    return `CyberChef ${cyberChefVersion}`;
+}
+
+const bundleVersionPattern =
+    /(<key>CFBundleVersion<\/key>\s*<string>)([^<]*)(<\/string>)/;
+
+export function readInfoPlistBundleVersion(infoPlistContents) {
+    const match = infoPlistContents.match(bundleVersionPattern);
+
+    if (!match) {
+        throw new Error(
+            "src-tauri/Info.plist is missing a CFBundleVersion key. The macOS About " +
+            "panel reads the vendored CyberChef version from it."
+        );
+    }
+
+    return match[2];
+}
+
+export async function syncInfoPlistBundleVersion(cyberChefVersion) {
+    const contents = await fs.readFile(infoPlistPath, "utf8");
+
+    // Throws when the key is absent rather than silently appending, so a
+    // restructured plist fails loudly instead of shipping a stale version.
+    readInfoPlistBundleVersion(contents);
+
+    const bundleVersion = buildBundleVersion(cyberChefVersion);
+    const updated = contents.replace(
+        bundleVersionPattern,
+        (_match, open, _value, close) => `${open}${bundleVersion}${close}`
+    );
+
+    if (updated !== contents) {
+        await fs.writeFile(infoPlistPath, updated);
+    }
+
+    return bundleVersion;
 }
 
 export function buildReleaseDownloadUrl(releaseTag) {

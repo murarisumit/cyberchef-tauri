@@ -81,6 +81,15 @@ input tabs, session, and window geometry, all restored on next launch.
 - reloading favorites, options, or session from disk
 - resetting favorites, options, session, or window state
 
+### Which CyberChef am I running?
+
+`CyberChef → About CyberChef` shows both versions — the wrapper's own version
+and the CyberChef release it packages:
+
+```
+Version 0.1.5 (CyberChef 11.2.0)
+```
+
 ### Where your data lives
 
 | What | Path |
