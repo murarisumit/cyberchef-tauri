@@ -32,6 +32,20 @@ const upstreamTouchpoints = {
         'id="load-name"',
         'id="load-text"',
         'id="load-delete-button"',
+        // The deep link the desktop app rewrites onto the cyberchef-tauri:// scheme.
+        'id="save-link"',
+    ],
+    // generateStateUrl must keep all state in the URL fragment. The desktop
+    // bridge splits the save-pane link on "#", and applies an inbound deep link
+    // by writing the fragment back. If upstream moves state into the query
+    // string, both halves break silently.
+    "src/web/waiters/ControlsWaiter.mjs": [
+        "return `${link}#${hash}`;",
+    ],
+    // loadURIParams must stay callable with no arguments: the deep-link handler
+    // sets the fragment, then lets CyberChef re-read it.
+    "src/web/App.mjs": [
+        "loadURIParams(params=this.getURIParams())",
     ],
 };
 
@@ -49,6 +63,9 @@ const upstreamAppApis = [
     "getInputObj",
     "addInput",
     "clearAllIoClick",
+    // Wrapped by the desktop bridge to rewrite the save-pane deep link.
+    "initialiseSaveLink",
+    "loadURIParams",
 ];
 
 async function collectSourceText(rootDir) {
@@ -149,6 +166,8 @@ try {
         settingsStyles,
         tauriMain,
         tauriConfig,
+        tauriManifest,
+        tauriInfoPlist,
     ] = await Promise.all([
         readText("scripts/lib.mjs"),
         readText("wrapper-assets/tauri-desktop.js"),
@@ -158,6 +177,8 @@ try {
         readText("wrapper-assets/tauri-settings.css"),
         readText("src-tauri/src/main.rs"),
         readText("src-tauri/tauri.conf.json"),
+        readText("src-tauri/Cargo.toml"),
+        readText("src-tauri/Info.plist"),
     ]);
 
     requireIncludes("scripts/lib.mjs", libSource, [
@@ -219,6 +240,15 @@ try {
         'getElementById("load-name")',
         'getElementById("load-delete-button")',
         'getElementById("save-footer")',
+        'const DEEP_LINK_SCHEME_PREFIX = "cyberchef-tauri://"',
+        'const DEEP_LINK_BASE_URL = "cyberchef-tauri://localhost/"',
+        "controls.initialiseSaveLink = function(recipeConfig)",
+        'getElementById("save-link")',
+        'invoke("take_pending_deep_link")',
+        'invoke("mark_deep_link_ready")',
+        "window.history.replaceState({}, \"\", `#${hash}`)",
+        "app.loadURIParams()",
+        "await initialiseDeepLinks();",
     ]);
 
     requireIncludes("wrapper-assets/settings.html", settingsPage, [
@@ -300,13 +330,40 @@ try {
         "fn delete_recipe_file",
         "fn open_recipe_storage_dir",
         "tauri::generate_handler![",
+        'const DEEP_LINK_IDENTIFIER: &str = "dev.murarisumit.cyberchef"',
+        'const DEEP_LINK_SCHEME: &str = "cyberchef-tauri"',
+        'const DEEP_LINK_URL_PREFIX: &str = "cyberchef-tauri://"',
+        "tauri_plugin_deep_link::prepare(DEEP_LINK_IDENTIFIER)",
+        "tauri_plugin_deep_link::register(DEEP_LINK_SCHEME,",
+        "fn handle_deep_link(app: &tauri::AppHandle, url: String)",
+        "fn open_deep_link_window(app: &tauri::AppHandle) -> Result<(), String>",
+        "fn take_pending_deep_link(app: tauri::AppHandle) -> Result<Option<String>, String>",
+        "fn mark_deep_link_ready(app: tauri::AppHandle) -> Result<(), String>",
+        "pending_deep_links: Mutex<Vec<String>>",
+        "deep_link_ready: Mutex<bool>",
     ]);
 
     requireIncludes("src-tauri/tauri.conf.json", tauriConfig, [
         '"distDir": "../.artifacts/cyberchef-dist"',
-        '"identifier": "dev.sumit.cyberchef"',
+        '"identifier": "dev.murarisumit.cyberchef"',
         '"tabbingIdentifier": "cyberchef"',
         '"dmg"',
+    ]);
+
+    requireIncludes("src-tauri/Cargo.toml", tauriManifest, [
+        'tauri-plugin-deep-link = "0.1.2"',
+    ]);
+
+    // macOS registers the scheme from the bundled Info.plist, which the Tauri
+    // bundler merges from this file. Without it the plugin silently never fires.
+    requireIncludes("src-tauri/Info.plist", tauriInfoPlist, [
+        // The About panel renders CFBundleVersion; release:check pins its value.
+        "<key>CFBundleVersion</key>",
+        "<string>CyberChef ",
+        "<key>CFBundleURLTypes</key>",
+        "<key>CFBundleURLSchemes</key>",
+        "<string>cyberchef-tauri</string>",
+        "<string>dev.murarisumit.cyberchef</string>",
     ]);
 
     await checkVendoredTouchpoints();

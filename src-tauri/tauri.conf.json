@@ -30,7 +30,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "dev.sumit.cyberchef",
+      "identifier": "dev.murarisumit.cyberchef",
       "longDescription": "CyberChef desktop app packaged from a vendored local source checkout.",
       "macOS": {
         "entitlements": null,

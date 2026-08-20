@@ -279,6 +279,96 @@ Review impact when upstream changes:
 - macOS window tabbing behavior changes
 - the app gains additional multi-window flows that need separate persistence
 
+### Desktop deep links
+
+Upstream CyberChef builds its `Deep link` URL from `window.location`. Inside the
+Tauri shell that resolves to `tauri://localhost/`, which means nothing outside
+the app and is indistinguishable from any other Tauri app. The wrapper registers
+a real `cyberchef-tauri://` URL scheme and rewrites that one link onto it.
+
+Behavior:
+
+- the `Deep link` shown in the save pane reads `cyberchef-tauri://localhost/#recipe=...`
+- opening such a link launches the app if it is not running, and loads the
+  recipe and input into a window
+- an incoming link on an already-running app opens a **new** workspace window
+  (a native tab on macOS) so it never overwrites unsaved work
+- on a cold start the link loads into the window the app opens anyway
+- a link applied at startup suppresses the saved-session restore for that window,
+  matching how upstream lets URL state win over stored state
+- the address bar URL that `App.updateTitle` hands to `history.replaceState` is
+  deliberately left on `tauri://localhost/`; swapping the document origin there
+  would throw
+
+Primary implementation:
+
+- [wrapper-assets/tauri-desktop.js](/Users/sumitmurari/workspace/personal/cyberchef-tauri/wrapper-assets/tauri-desktop.js)
+- [src-tauri/src/main.rs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/src/main.rs)
+- [src-tauri/Info.plist](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/Info.plist)
+- [src-tauri/Cargo.toml](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/Cargo.toml)
+
+Scheme registration is platform-specific:
+
+- macOS reads `CFBundleURLSchemes` from the bundled `Info.plist`. The Tauri
+  bundler merges `src-tauri/Info.plist` into the app bundle, so the scheme only
+  exists in a bundled build. `npm run tauri dev` cannot receive deep links on
+  macOS; use `npm run tauri build -- --debug` and open the built `.app` once so
+  Launch Services registers it.
+- Windows and Linux registration happens at runtime, the first time the app runs
+  and `tauri_plugin_deep_link::register` is called.
+
+Upstream touchpoints this customization depends on:
+
+- `window.app.manager.controls.initialiseSaveLink(recipeConfig)`
+- `#save-link` carrying the generated URL in its `href`
+- `window.app.loadURIParams()` reading state from the URL fragment
+- `ControlsWaiter.generateStateUrl` keeping all state in the fragment, not the
+  query string
+
+Review impact when upstream changes:
+
+- `initialiseSaveLink` is renamed, inlined, or stops writing `#save-link`
+- state moves from the URL fragment into the query string
+- `loadURIParams` stops being callable without arguments
+
+### About panel version
+
+macOS renders its standard About panel as
+`Version <CFBundleShortVersionString> (<CFBundleVersion>)`. Tauri fills the
+first from the app version and the second with a build timestamp, so the panel
+said nothing about which CyberChef the build actually contains.
+
+Behavior:
+
+- the About panel reads `Version <app version> (CyberChef <vendored version>)`,
+  e.g. `Version 0.1.6 (CyberChef 11.4.0)`
+- the wrapper version and the vendored CyberChef version are both visible, and
+  the CyberChef one is labelled so the two cannot be confused
+- the build timestamp Tauri would otherwise put there is dropped
+
+Primary implementation:
+
+- [src-tauri/Info.plist](/Users/sumitmurari/workspace/personal/cyberchef-tauri/src-tauri/Info.plist)
+- [scripts/lib.mjs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/scripts/lib.mjs)
+- [scripts/release-check.mjs](/Users/sumitmurari/workspace/personal/cyberchef-tauri/scripts/release-check.mjs)
+
+Why the plist and not Tauri's API: `MenuItem::About` carries an
+`AboutMetadata` struct, but the macOS backend in Tauri 1.x discards it and calls
+`orderFrontStandardAboutPanel:`, which reads the bundled `Info.plist` directly.
+Setting the metadata in Rust has no effect. The bundler merges
+`src-tauri/Info.plist` last, so the value there wins over the generated one.
+
+Keeping it honest:
+
+- `npm run vendor:update` rewrites `CFBundleVersion` via
+  `syncInfoPlistBundleVersion`, on both the subtree and recovery import paths
+- `npm run release:check` fails if `CFBundleVersion` drifts from the vendored
+  CyberChef version, or if the key goes missing entirely
+
+Review impact when upstream changes:
+
+- the vendored CyberChef version scheme changes shape
+- Tauri gains a working macOS About metadata API and this can move into Rust
 ## Automated Touchpoint Checks
 
 `npm run wrapper:check` verifies the wrapper-owned markers listed above and
@@ -308,7 +398,10 @@ When updating CyberChef, review at least these areas:
 10. Session restore saves and restores the full active tab set correctly.
 11. Config folder override and reset actions still work.
 12. Window state restores correctly.
-13. Tauri app still builds and launches after the vendor update.
+13. Deep link in the save pane still reads `cyberchef-tauri://localhost/#...`.
+14. Opening a `cyberchef-tauri://` link loads the recipe into the app.
+15. About panel shows the wrapper version and the new CyberChef version.
+16. Tauri app still builds and launches after the vendor update.
 
 ## Adding New Customizations
 

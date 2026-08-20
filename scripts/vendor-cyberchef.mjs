@@ -5,6 +5,7 @@ import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import {
     projectRoot,
+    syncInfoPlistBundleVersion,
     vendorMetadataPath,
     vendoredCyberChefDir,
 } from "./lib.mjs";
@@ -91,6 +92,10 @@ async function writeVendorMetadata(sourceDir, version) {
     };
 
     await fs.writeFile(`${vendorMetadataPath}`, `${JSON.stringify(metadata, null, 2)}\n`);
+
+    // Keep the About panel version aligned on this path too, so a recovery
+    // import does not leave a stale version in the bundle.
+    await syncInfoPlistBundleVersion(version);
 }
 
 try {
