@@ -8,7 +8,7 @@
          bundled Info.plist is the only way to get this in front of a user.
          Kept in sync by scripts/lib.mjs and enforced by `npm run release:check`. -->
     <key>CFBundleVersion</key>
-    <string>CyberChef 11.2.0</string>
+    <string>CyberChef 11.4.0</string>
     <key>CFBundleURLTypes</key>
     <array>
       <dict>

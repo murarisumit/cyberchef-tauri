@@ -295,6 +295,14 @@ export async function runBash(command, cwd = projectRoot, options = {}) {
         PATH: `${currentNodeBinDir}${path.delimiter}${process.env.PATH || ""}`,
     };
 
+    // npm exports its own config as npm_config_* when it runs a script, so any
+    // wrapper command invoked through `npm run` inherits npm_config_prefix.
+    // nvm refuses to load while that is set, which breaks the vendored build
+    // for anyone whose npm has a configured prefix, such as a Homebrew node.
+    for (const key of Object.keys(env)) {
+        if (key.toLowerCase() === "npm_config_prefix") delete env[key];
+    }
+
     await new Promise((resolve, reject) => {
         const child = spawn("bash", ["-c", command], {
             cwd,
@@ -345,6 +353,7 @@ export async function runInCyberChefShell(command, options = {}) {
 
     if (shouldUseNvm) {
         steps.unshift(`source ${shellEscape(nvmScript)}`);
+        steps.unshift("unset npm_config_prefix");
         steps.push("nvm install >/dev/null");
         steps.push("nvm use >/dev/null");
     }
@@ -391,4 +400,134 @@ export async function detectInstalledNodeModules() {
     if (!cyberChefDir) return false;
 
     return pathExists(path.join(cyberChefDir, "node_modules"));
+}
+
+async function runCapture(command, args, options = {}) {
+    return new Promise(resolve => {
+        const child = spawn(command, args, {
+            ...options,
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+
+        let stdout = "";
+        child.stdout.on("data", chunk => {
+            stdout += chunk;
+        });
+        child.stderr.on("data", () => {});
+        child.on("error", () => resolve({ok: false, stdout: ""}));
+        child.on("close", code => resolve({ok: code === 0, stdout: stdout.trim()}));
+    });
+}
+
+function sshKeyBlob(publicKeyLine) {
+    const [, blob = ""] = String(publicKeyLine).trim().split(/\s+/);
+    return blob;
+}
+
+/**
+ * Fails fast when git is configured to sign commits with an SSH key that
+ * cannot be used without a passphrase prompt.
+ *
+ * A blocked signer makes `git subtree` hang silently part way through a long
+ * import, so this is checked before any expensive work starts.
+ */
+export async function ensureCommitSigningReady() {
+    const signEnabled = await runCapture("git", ["config", "--get", "commit.gpgsign"], {
+        cwd: projectRoot,
+    });
+
+    if (!signEnabled.ok || signEnabled.stdout !== "true") return;
+
+    const format = await runCapture("git", ["config", "--get", "gpg.format"], {
+        cwd: projectRoot,
+    });
+
+    // Only the SSH signer is checked here. GPG agents handle their own caching
+    // and prompting, so probing them is not reliable enough to gate on.
+    if (format.stdout !== "ssh") return;
+
+    const signingKey = await runCapture("git", ["config", "--get", "user.signingkey"], {
+        cwd: projectRoot,
+    });
+
+    if (!signingKey.ok || !signingKey.stdout) return;
+
+    const configuredKey = signingKey.stdout;
+    const agentKeys = await runCapture("ssh-add", ["-L"]);
+    const loadedBlobs = new Set(
+        agentKeys.stdout.split("\n").map(sshKeyBlob).filter(Boolean)
+    );
+
+    // A literal public key in user.signingkey can only be satisfied by the agent.
+    if (/^(ssh|ecdsa|sk-)/.test(configuredKey)) {
+        if (loadedBlobs.has(sshKeyBlob(configuredKey))) return;
+
+        throw new Error(
+            "Commit signing is configured with an SSH key that is not loaded in ssh-agent.\n" +
+                "Run `ssh-add` for that key, or set CYBERCHEF_SKIP_SIGNING_CHECK=1 to bypass this check."
+        );
+    }
+
+    const keyPath = configuredKey.replace(/^~(?=\/|$)/, os.homedir());
+
+    // An unencrypted key file signs without prompting.
+    const unencrypted = await runCapture("ssh-keygen", ["-y", "-P", "", "-f", keyPath]);
+    if (unencrypted.ok) return;
+
+    const publicKey = await fs.readFile(`${keyPath}.pub`, "utf8").catch(() => "");
+    if (publicKey && loadedBlobs.has(sshKeyBlob(publicKey))) return;
+
+    throw new Error(
+        `Commit signing key ${keyPath} is passphrase protected and is not loaded in ssh-agent.\n` +
+            `Signing would block partway through the import. Run \`ssh-add ${keyPath}\` first, ` +
+            "or set CYBERCHEF_SKIP_SIGNING_CHECK=1 to bypass this check."
+    );
+}
+
+function parseSemverTag(tag) {
+    const match = tag.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+    if (!match) return null;
+
+    return {
+        major: Number(match[1]),
+        minor: Number(match[2]),
+        patch: Number(match[3]),
+        tag: tag.startsWith("v") ? tag : `v${tag}`,
+    };
+}
+
+function compareSemverTags(left, right) {
+    if (left.major !== right.major) return left.major - right.major;
+    if (left.minor !== right.minor) return left.minor - right.minor;
+    return left.patch - right.patch;
+}
+
+/**
+ * Resolves the highest upstream release tag.
+ *
+ * Vendor updates track tagged CyberChef releases, so update detection has to
+ * resolve the same thing. Comparing against a branch head instead would report
+ * the vendored tree as stale for every commit landed after a release.
+ */
+export async function resolveLatestUpstreamTag(remoteUrl) {
+    const {stdout} = await runCapture("git", ["ls-remote", "--tags", "--refs", remoteUrl], {
+        cwd: projectRoot,
+    });
+
+    const tags = stdout
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.split(/\s+/)[1] || "")
+        .filter(ref => ref.startsWith("refs/tags/v"))
+        .map(ref => ref.replace("refs/tags/", ""))
+        .map(parseSemverTag)
+        .filter(Boolean)
+        .sort(compareSemverTags);
+
+    if (!tags.length) {
+        throw new Error(`Unable to resolve upstream version tags from ${remoteUrl}`);
+    }
+
+    return tags[tags.length - 1].tag;
 }

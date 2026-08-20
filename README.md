@@ -87,7 +87,7 @@ input tabs, session, and window geometry, all restored on next launch.
 and the CyberChef release it packages:
 
 ```
-Version 0.1.5 (CyberChef 11.2.0)
+Version 0.1.6 (CyberChef 11.4.0)
 ```
 
 ### Where your data lives

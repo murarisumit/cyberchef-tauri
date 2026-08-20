@@ -340,7 +340,8 @@ said nothing about which CyberChef the build actually contains.
 
 Behavior:
 
-- the About panel reads `Version 0.1.5 (CyberChef 11.2.0)`
+- the About panel reads `Version <app version> (CyberChef <vendored version>)`,
+  e.g. `Version 0.1.6 (CyberChef 11.4.0)`
 - the wrapper version and the vendored CyberChef version are both visible, and
   the CyberChef one is labelled so the two cannot be confused
 - the build timestamp Tauri would otherwise put there is dropped
@@ -368,6 +369,18 @@ Review impact when upstream changes:
 
 - the vendored CyberChef version scheme changes shape
 - Tauri gains a working macOS About metadata API and this can move into Rust
+## Automated Touchpoint Checks
+
+`npm run wrapper:check` verifies the wrapper-owned markers listed above and
+also asserts that the upstream touchpoints the desktop bridge depends on still
+exist in `vendor/cyberchef`:
+
+- the save/load modal element ids
+- the `window.app` methods used for recipes, favourites, options, and sessions
+- the `--primary-font-family` CSS variable used by the font override
+
+That covers the integration points that fail silently at runtime. It does not
+cover behavior, so the manual review below is still required.
 
 ## Update Review Checklist
 
