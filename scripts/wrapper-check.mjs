@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import {projectRoot} from "./lib.mjs";
+import {projectRoot, resolveCyberChefDir} from "./lib.mjs";
 
 async function readText(relativePath) {
     return fs.readFile(path.join(projectRoot, relativePath), "utf8");
@@ -13,6 +13,130 @@ function requireIncludes(filePath, contents, expectedSnippets) {
             throw new Error(`Missing expected marker in ${filePath}: ${snippet}`);
         }
     }
+}
+
+
+/**
+ * Upstream markers the wrapper integrates against.
+ *
+ * These are not wrapper-owned. They live in vendored CyberChef and are the
+ * contract the desktop bridge depends on, so a vendor update that renames or
+ * removes any of them breaks desktop behavior at runtime rather than at build
+ * time. Checking them here turns that into a build failure.
+ */
+const upstreamTouchpoints = {
+    "src/web/html/index.html": [
+        'id="save-button"',
+        'id="save-name"',
+        'id="save-footer"',
+        'id="load-name"',
+        'id="load-text"',
+        'id="load-delete-button"',
+    ],
+};
+
+const upstreamAppApis = [
+    "getRecipeConfig",
+    "setRecipeConfig",
+    "saveFavourites",
+    "loadFavourites",
+    "populateOperationsList",
+    "initialiseOperationDragNDrop",
+    "updateOption",
+    "resetOptionsClick",
+    "setAutoBake",
+    "getInputNums",
+    "getInputObj",
+    "addInput",
+    "clearAllIoClick",
+];
+
+async function collectSourceText(rootDir) {
+    const chunks = [];
+
+    async function walk(currentDir) {
+        const entries = await fs.readdir(currentDir, {withFileTypes: true});
+
+        for (const entry of entries) {
+            const entryPath = path.join(currentDir, entry.name);
+
+            if (entry.isDirectory()) {
+                await walk(entryPath);
+                continue;
+            }
+
+            if (entry.name.endsWith(".mjs")) {
+                chunks.push(await fs.readFile(entryPath, "utf8"));
+            }
+        }
+    }
+
+    await walk(rootDir);
+    return chunks.join("\n");
+}
+
+async function checkVendoredTouchpoints() {
+    const cyberChefDir = await resolveCyberChefDir({optional: true});
+
+    if (!cyberChefDir) {
+        console.log("Vendored CyberChef not present, skipping upstream touchpoint checks.");
+        return;
+    }
+
+    for (const [relativePath, snippets] of Object.entries(upstreamTouchpoints)) {
+        const contents = await fs.readFile(path.join(cyberChefDir, relativePath), "utf8");
+        requireIncludes(`vendor/cyberchef/${relativePath}`, contents, snippets);
+    }
+
+    const webSource = await collectSourceText(path.join(cyberChefDir, "src", "web"));
+
+    // Matched on word boundaries so a rename that merely extends the name,
+    // such as setAutoBake becoming setAutoBakeState, is still reported.
+    const missingApis = upstreamAppApis.filter(
+        api => !new RegExp(`\\b${api}\\b`).test(webSource)
+    );
+
+    if (missingApis.length) {
+        throw new Error(
+            `Vendored CyberChef no longer exposes wrapper-required APIs: ${missingApis.join(", ")}\n` +
+                "Review docs/WRAPPER_CUSTOMIZATIONS.md and update the desktop bridge."
+        );
+    }
+
+    const stylesheetSource = await collectStylesheetText(
+        path.join(cyberChefDir, "src", "web", "stylesheets")
+    );
+
+    if (!stylesheetSource.includes("--primary-font-family")) {
+        throw new Error(
+            "Vendored CyberChef no longer defines --primary-font-family, " +
+                "which the desktop font override depends on."
+        );
+    }
+}
+
+async function collectStylesheetText(rootDir) {
+    const chunks = [];
+
+    async function walk(currentDir) {
+        const entries = await fs.readdir(currentDir, {withFileTypes: true});
+
+        for (const entry of entries) {
+            const entryPath = path.join(currentDir, entry.name);
+
+            if (entry.isDirectory()) {
+                await walk(entryPath);
+                continue;
+            }
+
+            if (entry.name.endsWith(".css")) {
+                chunks.push(await fs.readFile(entryPath, "utf8"));
+            }
+        }
+    }
+
+    await walk(rootDir);
+    return chunks.join("\n");
 }
 
 try {
@@ -184,6 +308,8 @@ try {
         '"tabbingIdentifier": "cyberchef"',
         '"dmg"',
     ]);
+
+    await checkVendoredTouchpoints();
 
     console.log("Wrapper customization checks passed.");
 } catch (error) {

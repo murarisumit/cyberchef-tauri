@@ -43,6 +43,42 @@ upstream/cyberchef
 Set `CYBERCHEF_MIRROR_BRANCH` only if you intentionally want a different mirror
 branch name.
 
+## Commit Signing Prerequisite
+
+The subtree import finishes with a merge commit. If this repository is
+configured to sign commits with an SSH key, that key must be usable without an
+interactive prompt before the import starts, otherwise the import stalls
+partway through waiting for a passphrase.
+
+Load the key first:
+
+```bash
+ssh-add ~/.ssh/<your-signing-key>
+```
+
+`npm run vendor:pull` and `npm run vendor:update` check this up front and fail
+immediately with instructions rather than hanging. To bypass the check:
+
+```bash
+CYBERCHEF_SKIP_SIGNING_CHECK=1 npm run vendor:update
+```
+
+## Update Detection
+
+`npm run vendor:check-update` reports whether the vendored tree is behind
+upstream. It tracks tagged releases by default, which is what
+`npm run vendor:update` pins to.
+
+To watch the upstream default branch instead of tags:
+
+```bash
+CYBERCHEF_TRACK=head npm run vendor:check-update
+```
+
+Tag tracking is the default deliberately. Watching the branch head reports the
+vendored tree as stale for every commit landed after a release, which a vendor
+bump to the latest tag cannot clear.
+
 ## Fast Path
 
 For a normal vendor refresh, use the single-command path first:
@@ -319,6 +355,10 @@ v<app-version>-cyberchef.<cyberchef-version>
   The subtree remote is missing, the repo was not seeded with subtree history
   yet, or the mirror branch has not been bootstrapped. Add
   `cyberchef-upstream` and run `npm run vendor:add` once.
+
+- `npm run vendor:pull` or `npm run vendor:update` stops on a signing error:
+  The configured SSH signing key is not usable without a passphrase prompt. Run
+  `ssh-add` for that key, then retry. See the commit signing prerequisite above.
 
 - `npm run prepare:cyberchef` fails:
   Re-run after a clean vendor refresh. The vendored dependency tree should be

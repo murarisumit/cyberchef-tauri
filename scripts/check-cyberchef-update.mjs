@@ -2,13 +2,14 @@ import fs from "node:fs/promises";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import process from "node:process";
-import {projectRoot, vendorMetadataPath} from "./lib.mjs";
+import {projectRoot, resolveLatestUpstreamTag, vendorMetadataPath} from "./lib.mjs";
 
 const execFileAsync = promisify(execFile);
 const remoteName = process.env.CYBERCHEF_SUBTREE_REMOTE || "cyberchef-upstream";
 const fallbackRemoteUrl =
     process.env.CYBERCHEF_UPSTREAM_URL || "https://github.com/gchq/CyberChef.git";
 const configuredRef = process.env.CYBERCHEF_SUBTREE_REF || null;
+const trackMode = process.env.CYBERCHEF_TRACK || "tag";
 const writeGithubOutput = process.argv.includes("--github-output");
 
 async function runGit(args) {
@@ -28,6 +29,22 @@ async function resolveRemoteUrl() {
     }
 }
 
+async function resolveTaggedTarget(remoteUrl) {
+    const tag = await resolveLatestUpstreamTag(remoteUrl);
+    const peeledOutput = await runGit(["ls-remote", remoteUrl, `${tag}^{}`]);
+    const directOutput = peeledOutput || await runGit(["ls-remote", remoteUrl, tag]);
+    const [commit = ""] = directOutput.split(/\s+/, 1);
+
+    if (!commit) {
+        throw new Error(`Unable to resolve upstream tag ${tag} from ${remoteUrl}`);
+    }
+
+    return {
+        ref: tag,
+        commit,
+    };
+}
+
 async function resolveUpstreamTarget(remoteUrl) {
     if (configuredRef) {
         const peeledOutput = await runGit(["ls-remote", remoteUrl, `${configuredRef}^{}`]);
@@ -42,6 +59,12 @@ async function resolveUpstreamTarget(remoteUrl) {
             ref: configuredRef,
             commit,
         };
+    }
+
+    // Vendor updates pin to tagged releases, so tags are the default signal.
+    // Set CYBERCHEF_TRACK=head to watch the upstream default branch instead.
+    if (trackMode !== "head") {
+        return resolveTaggedTarget(remoteUrl);
     }
 
     const output = await runGit(["ls-remote", "--symref", remoteUrl, "HEAD"]);
