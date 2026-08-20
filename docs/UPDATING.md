@@ -107,6 +107,8 @@ full Tauri build for routine vendor bumps.
    - Re-check config folder override behavior in the desktop app
    - Re-check the desktop settings window and its actions
    - Re-check window state restore behavior in the desktop app
+   - Re-check the `cyberchef-tauri://` deep link in the save pane and that
+     opening one loads the recipe
    - Re-check wrapper-injected styling and any other desktop-only behavior
 
 5. Build the desktop app:
@@ -128,6 +130,10 @@ full Tauri build for routine vendor bumps.
    - desktop session restore brings back the last active tab set
    - desktop config folder override and default reset still work
    - desktop window state restores correctly
+   - the save pane `Deep link` reads `cyberchef-tauri://localhost/#...`
+   - `open "cyberchef-tauri://localhost/#recipe=To_Base64('A-Za-z0-9%2B/%3D')&input=aGk"`
+     launches the app and loads the recipe. Deep links only resolve from a
+     bundled app, so run this against the installed build, not `tauri dev`.
 
 7. Commit the update:
 

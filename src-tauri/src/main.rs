@@ -82,6 +82,8 @@ struct DesktopSettingsSnapshot {
 struct AppState {
     is_exiting: Mutex<bool>,
     settings_target_label: Mutex<String>,
+    pending_deep_links: Mutex<Vec<String>>,
+    deep_link_ready: Mutex<bool>,
 }
 
 impl Default for AppState {
@@ -89,6 +91,8 @@ impl Default for AppState {
         Self {
             is_exiting: Mutex::new(false),
             settings_target_label: Mutex::new(MAIN_WINDOW_LABEL.to_string()),
+            pending_deep_links: Mutex::new(Vec::new()),
+            deep_link_ready: Mutex::new(false),
         }
     }
 }
@@ -116,6 +120,12 @@ const SETTINGS_WINDOW_MIN_HEIGHT: u32 = 520;
 const MAIN_WINDOW_LABEL: &str = "main";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const WINDOW_TABBING_IDENTIFIER: &str = "cyberchef";
+// Must stay in sync with `tauri.bundle.identifier` in tauri.conf.json and with
+// the `CFBundleURLSchemes` entry in src-tauri/Info.plist. macOS registers the
+// scheme from the bundled Info.plist, so the plugin cannot add it at runtime.
+const DEEP_LINK_IDENTIFIER: &str = "dev.murarisumit.cyberchef";
+const DEEP_LINK_SCHEME: &str = "cyberchef-tauri";
+const DEEP_LINK_URL_PREFIX: &str = "cyberchef-tauri://";
 
 fn home_dir() -> Result<PathBuf, String> {
     env::var_os("HOME")
@@ -1384,6 +1394,115 @@ fn target_workspace_window(window: &tauri::Window) -> Result<tauri::Window, Stri
         .ok_or_else(|| format!("Unable to find workspace window {target_label}."))
 }
 
+fn queue_deep_link(app: &tauri::AppHandle, url: String) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut pending = state
+        .pending_deep_links
+        .lock()
+        .map_err(|error| format!("Unable to queue the deep link: {error}"))?;
+
+    pending.push(url);
+    Ok(())
+}
+
+fn is_deep_link_ready(app: &tauri::AppHandle) -> bool {
+    app.state::<AppState>()
+        .deep_link_ready
+        .lock()
+        .map(|ready| *ready)
+        .unwrap_or(false)
+}
+
+fn focused_workspace_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
+    app.windows()
+        .into_values()
+        .find(|window| {
+            is_workspace_window_label(window.label()) && window.is_focused().unwrap_or(false)
+        })
+        .or_else(|| app.get_window(MAIN_WINDOW_LABEL))
+}
+
+/// Opens a fresh workspace window for an incoming deep link so that a link
+/// never overwrites unsaved work in the window that happens to be focused.
+/// The new window claims the queued link itself while it boots.
+fn open_deep_link_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let source_window = focused_workspace_window(app);
+    let label = next_window_label(app)?;
+    let window = create_native_window(app, &label)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(source_window) = source_window.as_ref() {
+            if source_window.label() != window.label() {
+                attach_window_as_native_tab(source_window, &window)?;
+            }
+        }
+    }
+
+    let _ = source_window;
+
+    window
+        .set_focus()
+        .map_err(|error| format!("Unable to focus window {}: {error}", window.label()))?;
+    Ok(())
+}
+
+fn handle_deep_link(app: &tauri::AppHandle, url: String) {
+    let url = url.trim().to_string();
+
+    if !url.starts_with(DEEP_LINK_URL_PREFIX) {
+        return;
+    }
+
+    if let Err(error) = queue_deep_link(app, url) {
+        eprintln!("{error}");
+        return;
+    }
+
+    // While the app is still starting up the first window drains the queue on
+    // its own, so only an already-running instance needs a window opened.
+    if !is_deep_link_ready(app) {
+        return;
+    }
+
+    // On macOS this runs on the AppKit main thread. Window creation and the
+    // native tab attachment both round-trip through the main thread, so doing
+    // that work here would deadlock.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Err(error) = open_deep_link_window(&app) {
+            eprintln!("{error}");
+        }
+    });
+}
+
+#[tauri::command]
+fn take_pending_deep_link(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let state = app.state::<AppState>();
+    let mut pending = state
+        .pending_deep_links
+        .lock()
+        .map_err(|error| format!("Unable to read the queued deep links: {error}"))?;
+
+    if pending.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(pending.remove(0)))
+}
+
+#[tauri::command]
+fn mark_deep_link_ready(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut ready = state
+        .deep_link_ready
+        .lock()
+        .map_err(|error| format!("Unable to mark deep links as ready: {error}"))?;
+
+    *ready = true;
+    Ok(())
+}
+
 #[tauri::command]
 fn recipe_storage_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(recipes_dir(&app)?.display().to_string())
@@ -1692,6 +1811,10 @@ fn build_app_menu(app_name: &str) -> Menu {
 }
 
 fn main() {
+    // Must be the first thing `main` does: on Windows and Linux this decides
+    // whether the process is the primary instance before any window is built.
+    tauri_plugin_deep_link::prepare(DEEP_LINK_IDENTIFIER);
+
     let context = tauri::generate_context!();
     let menu = build_app_menu(&context.package_info().name);
 
@@ -1705,6 +1828,15 @@ fn main() {
             apply_saved_window_state(&window)?;
             ensure_window_registry(&app.handle())?;
             restore_native_windows(&app.handle())?;
+
+            let deep_link_handle = app.handle();
+            tauri_plugin_deep_link::register(DEEP_LINK_SCHEME, move |url| {
+                handle_deep_link(&deep_link_handle, url);
+            })
+            .map_err(|error| {
+                format!("Unable to register the {DEEP_LINK_SCHEME} URL scheme: {error}")
+            })?;
+
             Ok(())
         })
         .on_window_event(|event| match event.event() {
@@ -1780,7 +1912,9 @@ fn main() {
             reset_favorites_now,
             reset_session_now,
             reset_window_state_now,
-            new_native_tab
+            new_native_tab,
+            take_pending_deep_link,
+            mark_deep_link_ready
         ])
         .build(context)
         .expect("error while building tauri application");

@@ -102,8 +102,15 @@ called out explicitly as not run.
 
 ## Documentation Rules
 
-- Keep `README.md` high-level.
-- Put high-frequency operational guidance in dedicated docs.
+- `README.md` is for people who install and use the app: installation, the
+  macOS Gatekeeper workaround, what the desktop app does that a browser tab
+  does not, and where its files live. Keep development detail out of it.
+- `CONTRIBUTING.md` is for people who work on the repo: layout, history model,
+  local development, validation gates, and how to add wrapper customizations.
+- Put high-frequency operational guidance in dedicated docs under `docs/`.
+- When user-visible behavior changes, update `README.md`. When the wrapper
+  layers new behavior over upstream, update `docs/WRAPPER_CUSTOMIZATIONS.md`
+  and `scripts/wrapper-check.mjs`.
 - When changing the update or release flow, update:
   - `docs/UPDATING.md`
   - `.github/workflows/*` if automation changes

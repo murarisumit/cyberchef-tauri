@@ -16,6 +16,12 @@
     let sessionSaveTimeout = null;
     let sessionPersistenceSuspended = false;
 
+    // Registered in src-tauri/Info.plist and src-tauri/src/main.rs. Keep the
+    // scheme identical in all three places.
+    const DEEP_LINK_SCHEME_PREFIX = "cyberchef-tauri://";
+    const DEEP_LINK_BASE_URL = "cyberchef-tauri://localhost/";
+    const DEEP_LINK_DISPLAY_LENGTH = 120;
+
     const eolCodeToSequence = {
         LF: "\n",
         CR: "\r",
@@ -677,6 +683,111 @@
         return reloadSessionPromise;
     }
 
+    function toDeepLinkUrl(url) {
+        if (!url) return DEEP_LINK_BASE_URL;
+        if (url.startsWith(DEEP_LINK_BASE_URL)) return url;
+
+        const hashIndex = url.indexOf("#");
+
+        return hashIndex === -1 ?
+            DEEP_LINK_BASE_URL :
+            `${DEEP_LINK_BASE_URL}${url.slice(hashIndex)}`;
+    }
+
+    function truncateDeepLink(url) {
+        return url.length > DEEP_LINK_DISPLAY_LENGTH ?
+            `${url.slice(0, DEEP_LINK_DISPLAY_LENGTH - 3)}...` :
+            url;
+    }
+
+    // The save pane link is the only place CyberChef shows its state URL to be
+    // copied elsewhere. Inside the desktop app that URL would read
+    // `tauri://localhost/`, which is both meaningless outside the app and
+    // indistinguishable from any other Tauri app, so rewrite just this one link
+    // onto the registered `cyberchef-tauri://` scheme. The address bar URL that
+    // `App.updateTitle` feeds to `history.replaceState` is deliberately left
+    // alone: replacing the document origin there would throw.
+    function installDeepLinkBridge() {
+        if (!window.app || window.app.__desktopDeepLinkBridgeInstalled) return;
+        if (!window.app.manager || !window.app.manager.controls) return;
+
+        const controls = window.app.manager.controls;
+        const originalInitialiseSaveLink = controls.initialiseSaveLink.bind(controls);
+
+        controls.initialiseSaveLink = function(recipeConfig) {
+            const result = originalInitialiseSaveLink(recipeConfig);
+            const saveLinkEl = document.getElementById("save-link");
+
+            if (saveLinkEl) {
+                const deepLink = toDeepLinkUrl(saveLinkEl.getAttribute("href"));
+
+                saveLinkEl.setAttribute("href", deepLink);
+                saveLinkEl.textContent = truncateDeepLink(deepLink);
+            }
+
+            return result;
+        };
+
+        window.app.__desktopDeepLinkBridgeInstalled = true;
+    }
+
+    async function applyDeepLink(url) {
+        if (typeof url !== "string" || !url.startsWith(DEEP_LINK_SCHEME_PREFIX)) return false;
+
+        const hashIndex = url.indexOf("#");
+        const hash = hashIndex === -1 ? "" : url.slice(hashIndex + 1);
+
+        if (!hash) return false;
+
+        const app = await waitForApp();
+
+        if (!app || typeof app.loadURIParams !== "function") return false;
+
+        // Assign through the history API rather than `location.hash` so the
+        // fragment is not re-encoded on the way in; CyberChef reads it back
+        // verbatim from `location.href`.
+        window.history.replaceState({}, "", `#${hash}`);
+        app.loadURIParams();
+
+        return true;
+    }
+
+    async function consumePendingDeepLink() {
+        try {
+            const url = await invoke("take_pending_deep_link");
+
+            if (!url) return false;
+
+            const applied = await applyDeepLink(url);
+
+            if (applied) {
+                alertUser("Recipe loaded from deep link.", 3000);
+            }
+
+            return applied;
+        } catch (error) {
+            alertUser(`Could not open the deep link: ${error}`, 4000);
+            return false;
+        }
+    }
+
+    async function initialiseDeepLinks() {
+        await waitForApp();
+
+        installDeepLinkBridge();
+
+        // Claim readiness before draining the queue. If a link arrives in the
+        // gap the backend opens an extra window for it, which is a better
+        // failure mode than dropping the link entirely.
+        try {
+            await invoke("mark_deep_link_ready");
+        } catch (error) {
+            alertUser(`Deep links are unavailable: ${error}`, 4000);
+        }
+
+        return consumePendingDeepLink();
+    }
+
     function installFavoritesBridge() {
         if (!window.app || window.app.__desktopFavoritesBridgeInstalled) return;
 
@@ -957,6 +1068,10 @@
         try {
             await initialiseDesktopSettings();
             await initialiseDesktopFavorites();
+            // Must precede the session restore: applying a deep link sets a URL
+            // fragment, and `reloadSessionFromDisk` deliberately stands down
+            // when the URL already carries state.
+            await initialiseDeepLinks();
             await initialiseDesktopSession();
             await initialiseDesktopRecipeStorage();
         } catch (error) {
